@@ -1,5 +1,6 @@
 # -WTN-
 **tip:** this application can work,some explanatory note is chinese,can't display in github,some explanatory note is my mind when i program this application.this applaction need 10-20s to start.
+this is the link of EinStein würfelt nicht [**dataset**](https://github.com/import1bones/EinStein-w-rfelt-nicht-dataset)
 ## about
 - this project was used in a  machine game
 - about this kind of game you can know about by search **EinStein würfelt nicht!** in wiki,it rule is simple.
