@@ -17,7 +17,7 @@ if you have know about this game's rule,we will show you how to use this applica
 - An intergration of MCST and Machine-Learning.
 ## -Now-
 - RandomList can't be used.
-- dataset is too few,dataset only include uct vs uct,if vs decision tree,always be beat.
+- dataset is too few,dataset only include uct vs uct.if vs decision tree,it always be beat.
 ## -Disadvantage-
 - Don't support multi-thread.
 - GUI is not user friendly.
