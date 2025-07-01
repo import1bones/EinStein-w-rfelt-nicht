@@ -1,0 +1,2 @@
+# This file ensures the weight directory is tracked by git
+# Neural network weights and model files will be stored here

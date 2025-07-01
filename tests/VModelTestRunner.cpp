@@ -7,7 +7,7 @@
 #include <string>
 
 int main(int argc, char* argv[]) {
-    std::cout << "🔬 V-Model Test Framework for Einstein Game Refactor" << std::endl;
+    std::cout << "*** V-Model Test Framework for Einstein Game Refactor ***" << std::endl;
     std::cout << "====================================================" << std::endl;
     
     // Register all tests
@@ -93,19 +93,19 @@ int main(int argc, char* argv[]) {
     }
     
     // Print final summary
-    std::cout << "\n🏁 V-Model Testing Complete" << std::endl;
+    std::cout << "\n*** V-Model Testing Complete ***" << std::endl;
     std::cout << "============================" << std::endl;
     
     int exit_code = framework.GetExitCode();
     if (exit_code == 0) {
-        std::cout << "✅ All tests passed - Refactor validation successful!" << std::endl;
+        std::cout << "[SUCCESS] All tests passed - Refactor validation successful!" << std::endl;
         std::cout << "\nNext Steps:" << std::endl;
         std::cout << "  1. Fix any remaining implementation issues" << std::endl;
         std::cout << "  2. Improve code coverage in AI and Graphics components" << std::endl;
         std::cout << "  3. Add more integration tests for complex scenarios" << std::endl;
         std::cout << "  4. Performance optimization based on benchmarks" << std::endl;
     } else {
-        std::cout << "❌ Some tests failed - Review results and fix issues" << std::endl;
+        std::cout << "[FAILED] Some tests failed - Review results and fix issues" << std::endl;
         std::cout << "\nActions Required:" << std::endl;
         std::cout << "  1. Review failed test details above" << std::endl;
         std::cout << "  2. Fix implementation or design issues" << std::endl;

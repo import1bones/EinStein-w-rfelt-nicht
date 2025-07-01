@@ -11,8 +11,13 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Set compiler flags
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -DDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+if(MSVC)
+    set(CMAKE_CXX_FLAGS_DEBUG "/DEBUG /Od /W4 /DDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG")
+else()
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -DDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+endif()
 
 # Enable testing
 enable_testing()
@@ -82,7 +87,6 @@ set(CORE_HEADERS
 # AI source files (optional)
 set(AI_SOURCES
     src/ai/MCTS.cpp
-    src/ai/NeuralNetwork.cpp
 )
 
 set(AI_HEADERS
@@ -93,7 +97,6 @@ set(AI_HEADERS
 # Graphics source files (optional)
 set(GRAPHICS_SOURCES
     src/graphics/Renderer.cpp
-    src/graphics/InputHandler.cpp
 )
 
 set(GRAPHICS_HEADERS
@@ -103,8 +106,6 @@ set(GRAPHICS_HEADERS
 
 # Game logic source files
 set(GAME_SOURCES
-    src/game/GameState.cpp
-    src/game/Game.cpp
 )
 
 set(GAME_HEADERS
@@ -202,7 +203,7 @@ target_include_directories(${PROJECT_NAME}_tests PRIVATE ${CMAKE_SOURCE_DIR}/inc
 
 # Build V-Model test framework
 add_executable(${PROJECT_NAME}_vmodel_tests 
-    tests/VModelTestRunner.cpp
+    tests/SimpleVModelRunner.cpp
     tests/framework/VModelTestFramework.cpp
 )
 

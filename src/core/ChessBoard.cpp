@@ -3,6 +3,7 @@
 #include <functional>
 #include <vector>
 #include <optional>
+#include <cassert>
 
 namespace Einstein {
 
@@ -144,45 +145,81 @@ void ChessBoard::UndoMove(const Move& move, int8_t captured_piece) {
 }
 
 bool ChessBoard::HasPlayerWon(Player player) const {
+    // Einstein game win conditions:
+    // 1. Get any piece to the opposite corner
+    // 2. Capture all opponent pieces
+    
     auto pieces = GetPlayerPieces(player);
     
+    // Check if no pieces left (lost condition for this player)
+    if (pieces.empty()) {
+        return false;
+    }
+    
+    // Check if any piece reached the target zone
     for (const auto& pos : pieces) {
         if (IsInTargetZone(pos, player)) {
             return true;
         }
     }
     
-    return false;
-}
-
-bool ChessBoard::CanPlayerMove(Player player, int dice) const {
-    // Try to find a piece that can move with the given dice
-    for (int piece_num = dice; piece_num <= NUM_PIECES; piece_num += dice) {
-        if (piece_num > NUM_PIECES) break;
-        
-        auto piece_pos = FindPiece(piece_num, player);
-        if (piece_pos.has_value()) {
-            // Check if this piece can move
-            auto adjacent_positions = GetAdjacentPositions(piece_pos.value());
-            for (const auto& adj_pos : adjacent_positions) {
-                Move test_move{piece_pos.value(), adj_pos};
-                if (IsValidMove(test_move, player)) {
-                    return true;
-                }
-            }
-        }
+    // Check if opponent has no pieces left
+    Player opponent = (player == Player::LEFT_TOP) ? Player::RIGHT_BOTTOM : Player::LEFT_TOP;
+    auto opponent_pieces = GetPlayerPieces(opponent);
+    if (opponent_pieces.empty()) {
+        return true;
     }
     
     return false;
 }
 
+bool ChessBoard::CanPlayerMove(Player player, int dice) const {
+    // Check if any piece can move with the given dice
+    auto valid_moves = GetValidMoves(player, dice);
+    return !valid_moves.empty();
+}
+
 std::vector<Move> ChessBoard::GetValidMoves(Player player, int dice) const {
     std::vector<Move> valid_moves;
     
-    // Find pieces that can move with the given dice
-    for (int piece_num = dice; piece_num <= NUM_PIECES; piece_num += dice) {
-        if (piece_num > NUM_PIECES) break;
+    // In Einstein game, you can move pieces with numbers that match dice or are multiples
+    std::vector<int> movable_pieces;
+    
+    // Find which piece numbers can move with this dice value
+    for (int piece_num = 1; piece_num <= NUM_PIECES; ++piece_num) {
+        if (CanPieceMove(piece_num, player, dice)) {
+            auto piece_pos = FindPiece(piece_num, player);
+            if (piece_pos.has_value()) {
+                movable_pieces.push_back(piece_num);
+            }
+        }
+    }
+    
+    // If no exact match, find the closest available piece
+    if (movable_pieces.empty()) {
+        // Look for the closest smaller piece
+        for (int piece_num = dice - 1; piece_num >= 1; --piece_num) {
+            auto piece_pos = FindPiece(piece_num, player);
+            if (piece_pos.has_value()) {
+                movable_pieces.push_back(piece_num);
+                break;
+            }
+        }
         
+        // If still no piece found, look for the closest larger piece
+        if (movable_pieces.empty()) {
+            for (int piece_num = dice + 1; piece_num <= NUM_PIECES; ++piece_num) {
+                auto piece_pos = FindPiece(piece_num, player);
+                if (piece_pos.has_value()) {
+                    movable_pieces.push_back(piece_num);
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Generate moves for each movable piece
+    for (int piece_num : movable_pieces) {
         auto piece_pos = FindPiece(piece_num, player);
         if (piece_pos.has_value()) {
             auto adjacent_positions = GetAdjacentPositions(piece_pos.value());
@@ -272,8 +309,8 @@ std::vector<Position> ChessBoard::GetAdjacentPositions(const Position& pos) cons
 }
 
 bool ChessBoard::CanPieceMove(int piece_number, Player player, int dice) const {
-    // Check if the piece number is valid for the given dice
-    return (piece_number % dice == 0) || (piece_number == dice);
+    // In Einstein game, exact dice match or closest available piece
+    return piece_number == dice;
 }
 
 Player ChessBoard::GetPieceOwner(int8_t piece) const {

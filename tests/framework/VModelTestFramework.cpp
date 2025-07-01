@@ -83,7 +83,7 @@ void VModelTestFramework::RunTestsForComponent(const std::string& component) {
                 metrics.execution_time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
                 metrics.passed = true;
                 
-                std::cout << "  ✅ [" << TestLevelToString(test.level) << "] " << test.name 
+                std::cout << "  [PASS] [" << TestLevelToString(test.level) << "] " << test.name 
                          << " (" << std::fixed << std::setprecision(2) << metrics.execution_time_ms << "ms)" << std::endl;
                 
                 component_passed++;
@@ -95,7 +95,7 @@ void VModelTestFramework::RunTestsForComponent(const std::string& component) {
                 metrics.passed = false;
                 metrics.error_message = e.what();
                 
-                std::cout << "  ❌ [" << TestLevelToString(test.level) << "] " << test.name 
+                std::cout << "  [FAIL] [" << TestLevelToString(test.level) << "] " << test.name 
                          << " - " << e.what() << std::endl;
                 
                 component_failed++;
@@ -147,7 +147,7 @@ void VModelTestFramework::ExecuteTest(const TestEntry& test) {
         metrics.execution_time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
         metrics.passed = true;
         
-        std::cout << "  ✅ " << test.name 
+        std::cout << "  [PASS] " << test.name 
                  << " (" << std::fixed << std::setprecision(2) << metrics.execution_time_ms << "ms)" << std::endl;
         
         total_passed_++;
@@ -158,7 +158,7 @@ void VModelTestFramework::ExecuteTest(const TestEntry& test) {
         metrics.passed = false;
         metrics.error_message = e.what();
         
-        std::cout << "  ❌ " << test.name << " - " << e.what() << std::endl;
+        std::cout << "  [FAIL] " << test.name << " - " << e.what() << std::endl;
         
         total_failed_++;
     }
@@ -213,7 +213,7 @@ void VModelTestFramework::PrintSummary() {
                  << overall_coverage << "%" << std::endl;
     }
     
-    std::cout << "\nTest Status: " << (total_failed_ == 0 ? "✅ PASS" : "❌ FAIL") << std::endl;
+    std::cout << "\nTest Status: " << (total_failed_ == 0 ? "[PASS]" : "[FAIL]") << std::endl;
 }
 
 void VModelTestFramework::PrintDetailedResults() {
@@ -225,10 +225,10 @@ void VModelTestFramework::PrintDetailedResults() {
                  << result.component_tested << "::" << result.test_name << " - ";
         
         if (result.passed) {
-            std::cout << "✅ PASS (" << std::fixed << std::setprecision(2) 
+            std::cout << "[PASS] (" << std::fixed << std::setprecision(2) 
                      << result.execution_time_ms << "ms)";
         } else {
-            std::cout << "❌ FAIL - " << result.error_message;
+            std::cout << "[FAIL] - " << result.error_message;
         }
         std::cout << std::endl;
     }
@@ -258,11 +258,11 @@ void VModelTestFramework::GenerateVModelReport() {
         
         std::cout << "  " << name << ": ";
         if (total == 0) {
-            std::cout << "⚪ No tests defined";
+            std::cout << "[NONE] No tests defined";
         } else if (passed == total) {
-            std::cout << "✅ Validated (" << passed << "/" << total << ")";
+            std::cout << "[PASS] Validated (" << passed << "/" << total << ")";
         } else {
-            std::cout << "❌ Issues found (" << passed << "/" << total << ")";
+            std::cout << "[FAIL] Issues found (" << passed << "/" << total << ")";
         }
         std::cout << std::endl;
     };
@@ -326,16 +326,16 @@ void VModelTestFramework::ValidatePerformance() {
                      << "ms (max: " << max_time << "ms) ";
             
             if (within_benchmark) {
-                std::cout << "✅";
+                std::cout << "[OK]";
             } else {
-                std::cout << "❌ SLOW";
+                std::cout << "[SLOW]";
                 all_passed = false;
             }
             std::cout << std::endl;
         }
     }
     
-    std::cout << "Performance Status: " << (all_passed ? "✅ PASS" : "❌ FAIL") << std::endl;
+    std::cout << "Performance Status: " << (all_passed ? "[PASS]" : "[FAIL]") << std::endl;
 }
 
 void VModelTestFramework::GenerateReport(const std::string& output_file) {

@@ -1,11 +1,35 @@
-# Prerequisites
-*.d
+# Einstein Game - .gitignore
+# Ignore unnecessary files for cleaner repository
+
+# Build directories
+build/
+builds/
+out/
+cmake-build-*/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+x64/
+x86/
+Win32/
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
 
 # Compiled Object files
-*.slo
-*.lo
 *.o
 *.obj
+*.lo
+*.slo
 
 # Precompiled Headers
 *.gch
@@ -21,12 +45,235 @@
 *.smod
 
 # Compiled Static libraries
-*.lai
-*.la
 *.a
 *.lib
+*.lai
+*.la
 
 # Executables
 *.exe
 *.out
 *.app
+*.elf
+
+# IDE specific files
+.vscode/settings.json
+.vscode/launch.json
+.vscode/c_cpp_properties.json
+*.code-workspace
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.sln
+*.vcxproj
+
+# Visual Studio temporary files
+*.tmp
+*.temp
+*.cache
+*.ilk
+*.log
+*.tlog
+*.lastbuildstate
+*.idb
+*.pdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp_proj
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Python virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Machine Learning models and data
+*.h5
+*.pkl
+*.pickle
+*.joblib
+*.model
+*.weights
+*.pt
+*.pth
+checkpoints/
+logs/
+tensorboard/
+wandb/
+
+# Test outputs and reports
+test_results/
+coverage/
+*.coverage
+htmlcov/
+.coverage
+.pytest_cache/
+junit.xml
+test-report.xml
+*.html
+*.json
+!package.json
+!requirements.txt
+!config.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.rej
+*.patch
+
+# Logs
+*.log
+logs/
+log/
+
+# Package managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# SDL2 and third-party libraries (if downloaded locally)
+third_party/
+external/
+deps/
+dependencies/
+
+# Documentation build outputs
+docs/_build/
+docs/html/
+docs/latex/
+*.pdf
+!README.md
+!*.md
+
+# Archive files
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tar.bz2
+
+# Profiling data
+*.prof
+*.profile
+gmon.out
+callgrind.out.*
+perf.data*
+
+# Memory debugging
+*.memcheck
+valgrind-out.*
+
+# Custom build artifacts
+einstein_game
+einstein_game.exe
+test_runner
+test_runner.exe
+*.app
+
+# Ignore weight files but keep the directory structure
+weight/*.bin
+weight/*.dat
+weight/*.weights
+!weight/.gitkeep
+
+# Ignore generated config files but keep template
+config_local.json
+settings_local.json
+
+# IDE workspace files
+workspace.code-workspace
+*.workspace
+
+# Clang specific
+.clangd/
+compile_commands.json
+
+# GDB files
+.gdb_history
+
+# Core dumps
+core.*
+*.core
+
+# Windows specific
+*.lnk
+desktop.ini
+
+# Mac specific
+.AppleDouble
+.LSOverride
+Icon?
+
+# Linux specific
+.directory
+.fuse_hidden*
+
+# Ignore sensitive data
+secrets.json
+api_keys.json
+*.key
+*.pem
+*.cert
+
+# Ignore benchmark results
+benchmark_results/
+performance_logs/
+
+# Ignore local development scripts
+dev_*
+local_*
+personal_*
+
+# Keep important directories with .gitkeep
+!assets/.gitkeep
+!tests/.gitkeep
+!weight/.gitkeep
+!docs/.gitkeep
