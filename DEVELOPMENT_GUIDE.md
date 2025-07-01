@@ -37,8 +37,13 @@ The refactoring has established a solid foundation with modern C++ architecture,
 
 ### 6. **Testing & Quality**
 - ✅ Simple but effective test framework (`tests/test_main.cpp`)
+- ✅ **V-Model Test Framework** - Comprehensive testing following V-Model methodology
 - ✅ Performance benchmarking capabilities
 - ✅ Example unit tests structure
+- ✅ **Multi-level Testing**: Unit, Integration, System, and Acceptance tests
+- ✅ **Automated Test Scripts**: Cross-platform test runners with CI/CD integration
+- ✅ **Coverage Analysis**: Code coverage tracking and reporting
+- ✅ **Performance Monitoring**: Automated performance regression detection
 
 ## 🚧 Next Implementation Steps
 
@@ -299,3 +304,82 @@ git push origin feature/your-feature-name
 ---
 
 **The refactoring has created a solid foundation. The next step is systematic implementation of the core functionality, starting with fixing the build system and completing the essential game logic.**
+
+## 🧪 V-Model Testing Framework
+
+The project now includes a comprehensive V-Model testing framework that validates the refactor at multiple levels:
+
+### V-Model Testing Levels
+
+#### 1. **Unit Tests** (Implementation Validation)
+- Individual component testing
+- Core types, ChessBoard, Config validation
+- Performance benchmarking
+- Fast execution, isolated testing
+
+#### 2. **Integration Tests** (Module Interaction Validation)  
+- Component interaction testing
+- Data flow between modules
+- State management consistency
+- Configuration integration
+
+#### 3. **System Tests** (End-to-End Validation)
+- Overall system behavior
+- Performance and resource usage
+- Thread safety and error handling
+- Cross-platform compatibility
+
+#### 4. **Acceptance Tests** (Requirements Validation)
+- Original requirements compliance
+- Game rules validation (5x5 board, 6 pieces, dice 1-6)
+- Code quality standards
+- Security and maintainability requirements
+
+### Running V-Model Tests
+
+```bash
+# Quick test runs
+./build/EinStein_Game_vmodel_tests --unit          # Unit tests only
+./build/EinStein_Game_vmodel_tests --integration   # Integration tests only
+./build/EinStein_Game_vmodel_tests --system        # System tests only
+./build/EinStein_Game_vmodel_tests --acceptance    # Acceptance tests only
+
+# Component-specific testing
+./build/EinStein_Game_vmodel_tests --component ChessBoard
+./build/EinStein_Game_vmodel_tests --component Core
+
+# Complete validation with reports
+./run_vmodel_tests.sh     # Linux/macOS
+./run_vmodel_tests.bat    # Windows
+
+# Generate detailed reports
+./build/EinStein_Game_vmodel_tests --report results.html
+./build/EinStein_Game_vmodel_tests --report results.json
+```
+
+### Test Framework Features
+
+- **Comprehensive Coverage**: All V-Model levels covered
+- **Performance Monitoring**: Automated benchmarking and regression detection
+- **Cross-platform**: Works on Windows, Linux, and macOS
+- **CI/CD Integration**: JSON reports and exit codes for automation
+- **Detailed Reporting**: HTML and JSON output formats
+- **Code Coverage**: Integration with coverage analysis tools
+
+### Integration with Development Workflow
+
+```bash
+# Pre-commit validation
+make EinStein_Game_vmodel_tests && ./build/EinStein_Game_vmodel_tests --unit
+
+# Feature branch validation  
+./build/EinStein_Game_vmodel_tests --integration
+
+# Release validation
+./run_vmodel_tests.sh
+
+# Performance regression testing
+./build/EinStein_Game_vmodel_tests --system --report performance.json
+```
+
+See `docs/VMODEL_TESTING.md` for comprehensive documentation.

@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "*.dbclient-js": "javascript",
-        "atomic": "cpp"
+        "atomic": "cpp",
+        "xstring": "cpp"
     }
 }

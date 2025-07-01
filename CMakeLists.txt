@@ -200,8 +200,27 @@ set_target_properties(${PROJECT_NAME}_tests PROPERTIES
 target_link_libraries(${PROJECT_NAME}_tests Threads::Threads)
 target_include_directories(${PROJECT_NAME}_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
+# Build V-Model test framework
+add_executable(${PROJECT_NAME}_vmodel_tests 
+    tests/VModelTestRunner.cpp
+    tests/framework/VModelTestFramework.cpp
+)
+
+set_target_properties(${PROJECT_NAME}_vmodel_tests PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)
+
+target_link_libraries(${PROJECT_NAME}_vmodel_tests Threads::Threads)
+target_include_directories(${PROJECT_NAME}_vmodel_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
 # Register tests with CTest
 add_test(NAME unit_tests COMMAND ${PROJECT_NAME}_tests)
+add_test(NAME vmodel_unit_tests COMMAND ${PROJECT_NAME}_vmodel_tests --unit)
+add_test(NAME vmodel_integration_tests COMMAND ${PROJECT_NAME}_vmodel_tests --integration)
+add_test(NAME vmodel_system_tests COMMAND ${PROJECT_NAME}_vmodel_tests --system)
+add_test(NAME vmodel_acceptance_tests COMMAND ${PROJECT_NAME}_vmodel_tests --acceptance)
+add_test(NAME vmodel_all_tests COMMAND ${PROJECT_NAME}_vmodel_tests)
 
 # Install targets
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
