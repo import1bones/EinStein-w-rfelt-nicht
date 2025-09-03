@@ -261,3 +261,10 @@ message(STATUS "AI support (Python/pybind11): ${AI_AVAILABLE}")
 message(STATUS "Threading support: ON")
 message(STATUS "Testing support: ON")
 message(STATUS "==========================================")
+# 自动复制 compile_commands.json 到项目根目录
+add_custom_command(
+    TARGET EinStein_Game POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_BINARY_DIR}/compile_commands.json
+        ${CMAKE_SOURCE_DIR}/compile_commands.json
+)
