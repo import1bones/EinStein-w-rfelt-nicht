@@ -55,10 +55,10 @@ private:
 
 // Simple logging system
 enum class LogLevel {
-    DEBUG,
-    INFO,
-    WARNING,
-    ERROR
+    Debug,
+    Info,
+    Warning,
+    Error
 };
 
 class Logger {
@@ -104,7 +104,7 @@ private:
     std::string GetTimestamp() const;
     std::string LevelToString(LogLevel level) const;
     
-    LogLevel current_level_ = LogLevel::INFO;
+    LogLevel current_level_ = LogLevel::Info;
     bool console_output_ = true;
     bool file_output_ = false;
     std::string log_filename_;

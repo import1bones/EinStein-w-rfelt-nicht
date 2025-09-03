@@ -262,39 +262,39 @@ void Logger::Initialize(bool console_output, bool file_output, const std::string
     if (file_output_ && !log_filename_.empty()) {
         log_file_ = std::make_unique<std::ofstream>(log_filename_, std::ios::app);
         if (log_file_->is_open()) {
-            WriteMessage(LogLevel::INFO, "=== Log Session Started ===");
+            WriteMessage(LogLevel::Info, "=== Log Session Started ===");
         }
     }
 }
 
 void Logger::Shutdown() {
     if (log_file_ && log_file_->is_open()) {
-        WriteMessage(LogLevel::INFO, "=== Log Session Ended ===");
+        WriteMessage(LogLevel::Info, "=== Log Session Ended ===");
         log_file_->close();
     }
 }
 
 void Logger::Debug(const std::string& message) {
-    if (current_level_ <= LogLevel::DEBUG) {
-        WriteMessage(LogLevel::DEBUG, message);
+    if (current_level_ <= LogLevel::Debug) {
+        WriteMessage(LogLevel::Debug, message);
     }
 }
 
 void Logger::Info(const std::string& message) {
-    if (current_level_ <= LogLevel::INFO) {
-        WriteMessage(LogLevel::INFO, message);
+    if (current_level_ <= LogLevel::Info) {
+        WriteMessage(LogLevel::Info, message);
     }
 }
 
 void Logger::Warning(const std::string& message) {
-    if (current_level_ <= LogLevel::WARNING) {
-        WriteMessage(LogLevel::WARNING, message);
+    if (current_level_ <= LogLevel::Warning) {
+        WriteMessage(LogLevel::Warning, message);
     }
 }
 
 void Logger::Error(const std::string& message) {
-    if (current_level_ <= LogLevel::ERROR) {
-        WriteMessage(LogLevel::ERROR, message);
+    if (current_level_ <= LogLevel::Error) {
+        WriteMessage(LogLevel::Error, message);
     }
 }
 
@@ -324,7 +324,7 @@ void Logger::WriteMessage(LogLevel level, const std::string& message) {
     std::string log_line = "[" + GetTimestamp() + "] [" + LevelToString(level) + "] " + message;
     
     if (console_output_) {
-        if (level == LogLevel::ERROR || level == LogLevel::WARNING) {
+        if (level == LogLevel::Error || level == LogLevel::Warning) {
             std::cerr << log_line << std::endl;
         } else {
             std::cout << log_line << std::endl;
@@ -348,10 +348,10 @@ std::string Logger::GetTimestamp() const {
 
 std::string Logger::LevelToString(LogLevel level) const {
     switch (level) {
-        case LogLevel::DEBUG:   return "DEBUG";
-        case LogLevel::INFO:    return "INFO";
-        case LogLevel::WARNING: return "WARN";
-        case LogLevel::ERROR:   return "ERROR";
+        case LogLevel::Debug:   return "DEBUG";
+        case LogLevel::Info:    return "INFO";
+        case LogLevel::Warning: return "WARN";
+        case LogLevel::Error:   return "ERROR";
         default:                return "UNKNOWN";
     }
 }

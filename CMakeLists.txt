@@ -76,12 +76,16 @@ set(CORE_SOURCES
     src/main.cpp
     src/core/ChessBoard.cpp
     src/utils/Config.cpp
+    src/utils/CLIRenderer.cpp
+    src/utils/GameSnapshot.cpp
 )
 
 set(CORE_HEADERS
     include/core/Types.h
     include/core/ChessBoard.h
     include/utils/Config.h
+    include/utils/CLIRenderer.h
+    include/utils/GameSnapshot.h
 )
 
 # AI source files (optional)
@@ -96,7 +100,7 @@ set(AI_HEADERS
 
 # Graphics source files (optional)
 set(GRAPHICS_SOURCES
-    src/graphics/Renderer.cpp
+    # src/graphics/Renderer.cpp  # Temporarily disabled - needs SDL2
 )
 
 set(GRAPHICS_HEADERS
@@ -106,6 +110,7 @@ set(GRAPHICS_HEADERS
 
 # Game logic source files
 set(GAME_SOURCES
+    src/game/GameState.cpp
 )
 
 set(GAME_HEADERS

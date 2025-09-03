@@ -13,6 +13,10 @@
 // Headers for CLI argument parsing
 #include <cstring>
 
+// Include our CLI renderer and snapshot system
+#include "utils/CLIRenderer.h"
+#include "utils/GameSnapshot.h"
+
 // Note: These headers would be available after full refactoring
 // #include "game/Game.h"
 // #include "graphics/Renderer.h"
@@ -275,6 +279,22 @@ private:
             {"validate config.json", "validate --all"}
         };
         
+        // CLI game command
+        commands_["cli"] = {
+            "cli",
+            "Run interactive CLI game",
+            [this](const std::vector<std::string>& args) { return HandleCLIGame(args); },
+            {"cli", "cli --verbose", "cli --difficulty 3"}
+        };
+        
+        // Snapshot command - non-interactive
+        commands_["snapshot"] = {
+            "snapshot",
+            "Run game from snapshot (non-interactive)",
+            [this](const std::vector<std::string>& args) { return HandleSnapshot(args); },
+            {"snapshot", "snapshot --id latest", "snapshot --steps 10 --verbose"}
+        };
+        
         // Version command
         commands_["version"] = {
             "version",
@@ -469,12 +489,82 @@ private:
         return success ? 0 : 1;
     }
     
-    int HandleVersion(const std::vector<std::string>& args) {
+    int HandleVersion(const std::vector<std::string>& /* args */) {
         std::cout << "Einstein Game v2.0.0\n";
         std::cout << "Built with modern C++17/20\n";
         std::cout << "Cross-platform gaming engine\n";
         std::cout << "AI-powered strategic gameplay\n";
         return 0;
+    }
+    
+    int HandleCLIGame(const std::vector<std::string>& args) {
+        bool verbose = false;
+        int difficulty = 3;
+        
+        // Parse arguments
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--verbose") {
+                verbose = true;
+            } else if (args[i] == "--difficulty" && i + 1 < args.size()) {
+                try {
+                    difficulty = std::stoi(args[i + 1]);
+                    ++i;
+                } catch (...) {
+                    std::cerr << "Invalid difficulty level: " << args[i + 1] << std::endl;
+                    return 1;
+                }
+            }
+        }
+        
+        Einstein::CLIGameController controller;
+        controller.SetVerbose(verbose);
+        controller.SetAIDifficulty(difficulty);
+        
+        return controller.RunInteractiveGame();
+    }
+    
+    int HandleSnapshot(const std::vector<std::string>& args) {
+        std::string snapshot_id;
+        int max_steps = 10;
+        bool verbose = false;
+        int delay_ms = 1000;
+        
+        // Parse arguments
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--id" && i + 1 < args.size()) {
+                snapshot_id = args[i + 1];
+                ++i;
+            } else if (args[i] == "--steps" && i + 1 < args.size()) {
+                try {
+                    max_steps = std::stoi(args[i + 1]);
+                    ++i;
+                } catch (...) {
+                    std::cerr << "Invalid step count: " << args[i + 1] << std::endl;
+                    return 1;
+                }
+            } else if (args[i] == "--delay" && i + 1 < args.size()) {
+                try {
+                    delay_ms = std::stoi(args[i + 1]);
+                    ++i;
+                } catch (...) {
+                    std::cerr << "Invalid delay: " << args[i + 1] << std::endl;
+                    return 1;
+                }
+            } else if (args[i] == "--verbose") {
+                verbose = true;
+            }
+        }
+        
+        Einstein::SnapshotGameRunner runner;
+        runner.SetVerbose(verbose);
+        runner.SetMaxSteps(max_steps);
+        runner.SetStepDelay(delay_ms);
+        
+        if (snapshot_id == "latest") {
+            snapshot_id = "";  // Use latest
+        }
+        
+        return runner.RunFromSnapshot(snapshot_id);
     }
 };
 
@@ -492,3 +582,4 @@ int main(int argc, char* argv[]) {
         std::cerr << "Unknown fatal error occurred" << std::endl;
         return 1;
     }
+}

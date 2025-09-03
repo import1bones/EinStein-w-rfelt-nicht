@@ -4,6 +4,7 @@
 #include <vector>
 #include <optional>
 #include <cassert>
+#include <iostream>
 
 namespace Einstein {
 
@@ -308,7 +309,7 @@ std::vector<Position> ChessBoard::GetAdjacentPositions(const Position& pos) cons
     return adjacent;
 }
 
-bool ChessBoard::CanPieceMove(int piece_number, Player player, int dice) const {
+bool ChessBoard::CanPieceMove(int piece_number, Player /* player */, int dice) const {
     // In Einstein game, exact dice match or closest available piece
     return piece_number == dice;
 }
