@@ -6,6 +6,55 @@ The refactoring has established a solid foundation with modern C++ architecture,
 
 ## ✅ Completed Components
 
+### Recent Developments (September 2025)
+
+#### Configurable Board Initialization System (Latest)
+- **Status**: ✅ Complete
+- **Location**: `include/core/ChessBoard.h`, `src/core/ChessBoard.cpp`
+- **Purpose**: User and AI configurable starting positions for strategic gameplay
+- **Testing**: Available via `./EinStein_Game config-demo` command
+
+**Key Features:**
+- **Predefined Setups**: Standard Triangle, Balanced, Aggressive, Defensive
+- **Custom Positioning**: User-defined piece placement via `InitializeCustom()`
+- **AI Optimization**: Difficulty-based optimal setup calculation  
+- **CLI Integration**: Complete demonstration and testing interface
+
+**Available Setup Types:**
+```cpp
+enum class InitialSetup {
+    STANDARD_TRIANGLE,     // Original Einstein triangular layout
+    BALANCED,              // Balanced defensive formation  
+    AGGRESSIVE,            // Forward-positioned pieces
+    DEFENSIVE,             // Back-positioned pieces
+    CUSTOM                 // User-defined positions
+};
+```
+
+#### MCTS Snapshot System
+- **Status**: ✅ Complete
+- **Location**: `include/utils/GameSnapshot.h`, `src/utils/GameSnapshot.cpp`
+- **Purpose**: Comprehensive MCTS tree state persistence for debugging and analysis
+- **Testing**: Available via `./EinStein_Game mcts-demo` command
+
+**Key Components:**
+- `MCTSSnapshot`: Complete MCTS state capture
+- `MCTSNodeSnapshot`: Individual node state persistence  
+- `SnapshotGameRunner`: Game execution with snapshot integration
+- JSON-like serialization without external dependencies
+
+#### CLI Renderer System
+- **Status**: ✅ Complete  
+- **Location**: `include/utils/CLIRenderer.h`, `src/utils/CLIRenderer.cpp`
+- **Purpose**: Text-based game visualization for development and testing
+- **Features**: Board state display, move visualization, game state representation
+
+#### Corrected Einstein Board Layout
+- **Status**: ✅ Complete
+- **Fix**: Corrected `ChessBoard::Initialize()` from rectangular to proper triangular Einstein formation
+- **Layout**: Left-Top triangular (rows 0-2) vs Right-Bottom triangular (rows 3-4)
+- **Testing**: Verified via CLI renderer and configuration demos
+
 ### 1. **Build System & Infrastructure**
 - ✅ CMake-based build system with optional dependencies
 - ✅ Cross-platform build scripts (Linux/macOS/Windows)

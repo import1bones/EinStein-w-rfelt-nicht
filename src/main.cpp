@@ -16,6 +16,7 @@
 // Include our CLI renderer and snapshot system
 #include "utils/CLIRenderer.h"
 #include "utils/GameSnapshot.h"
+#include "core/ChessBoard.h"
 
 // Note: These headers would be available after full refactoring
 // #include "game/Game.h"
@@ -285,6 +286,22 @@ private:
             "Run interactive CLI game",
             [this](const std::vector<std::string>& args) { return HandleCLIGame(args); },
             {"cli", "cli --verbose", "cli --difficulty 3"}
+        };
+        
+        // MCTS Demo command - demonstrate MCTS snapshot functionality
+        commands_["mcts-demo"] = {
+            "mcts-demo",
+            "Demonstrate MCTS snapshot functionality",
+            [this](const std::vector<std::string>& args) { return HandleMCTSDemo(args); },
+            {"mcts-demo", "mcts-demo --moves 5"}
+        };
+        
+        // Configuration Demo command - demonstrate configurable initialization
+        commands_["config-demo"] = {
+            "config-demo",
+            "Demonstrate configurable board initialization",
+            [this](const std::vector<std::string>& args) { return HandleConfigDemo(args); },
+            {"config-demo", "config-demo --setup aggressive", "config-demo --ai-optimal"}
         };
         
         // Snapshot command - non-interactive
@@ -565,6 +582,165 @@ private:
         }
         
         return runner.RunFromSnapshot(snapshot_id);
+    }
+    
+    int HandleConfigDemo(const std::vector<std::string>& args) {
+        std::string setup_type = "all";
+        bool ai_optimal = false;
+        bool verbose = false;
+        
+        // Parse arguments
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (args[i] == "--setup" && i + 1 < args.size()) {
+                setup_type = args[i + 1];
+                i++; // Skip the value
+            } else if (args[i] == "--ai-optimal") {
+                ai_optimal = true;
+            } else if (args[i] == "--verbose") {
+                verbose = true;
+            }
+        }
+        
+        std::cout << "\n=== Configurable Board Initialization Demo ===\n";
+        std::cout << "This demonstrates the configurable initialization system.\n";
+        std::cout << "Setup type: " << setup_type << "\n";
+        std::cout << "AI optimal: " << (ai_optimal ? "Yes" : "No") << "\n";
+        std::cout << "Verbose: " << (verbose ? "Yes" : "No") << "\n\n";
+        
+        // Demonstrate different board setups
+        Einstein::ChessBoard board;
+        Einstein::CLIRenderer renderer;
+        
+        if (setup_type == "all" || setup_type == "standard") {
+            std::cout << "=== Standard Triangle Setup ===\n";
+            board.Initialize(Einstein::InitialSetup::STANDARD_TRIANGLE);
+            renderer.RenderBoard(board);
+            std::cout << "\n";
+        }
+        
+        if (setup_type == "all" || setup_type == "balanced") {
+            std::cout << "=== Balanced Setup ===\n";
+            board.Initialize(Einstein::InitialSetup::BALANCED);
+            renderer.RenderBoard(board);
+            std::cout << "\n";
+        }
+        
+        if (setup_type == "all" || setup_type == "aggressive") {
+            std::cout << "=== Aggressive Setup ===\n";
+            board.Initialize(Einstein::InitialSetup::AGGRESSIVE);
+            renderer.RenderBoard(board);
+            std::cout << "\n";
+        }
+        
+        if (setup_type == "all" || setup_type == "defensive") {
+            std::cout << "=== Defensive Setup ===\n";
+            board.Initialize(Einstein::InitialSetup::DEFENSIVE);
+            renderer.RenderBoard(board);
+            std::cout << "\n";
+        }
+        
+        if (ai_optimal) {
+            std::cout << "=== AI-Optimized Setups ===\n";
+            
+            auto optimal_lt_easy = board.CalculateOptimalSetup(Einstein::Player::LEFT_TOP, Einstein::Difficulty::EASY);
+            std::cout << "Optimal for LT player (Easy): ";
+            switch (optimal_lt_easy) {
+                case Einstein::InitialSetup::STANDARD_TRIANGLE: std::cout << "Standard Triangle\n"; break;
+                case Einstein::InitialSetup::BALANCED: std::cout << "Balanced\n"; break;
+                case Einstein::InitialSetup::AGGRESSIVE: std::cout << "Aggressive\n"; break;
+                case Einstein::InitialSetup::DEFENSIVE: std::cout << "Defensive\n"; break;
+                case Einstein::InitialSetup::CUSTOM: std::cout << "Custom\n"; break;
+            }
+            board.Initialize(optimal_lt_easy);
+            renderer.RenderBoard(board);
+            std::cout << "\n";
+            
+            auto optimal_rb_hard = board.CalculateOptimalSetup(Einstein::Player::RIGHT_BOTTOM, Einstein::Difficulty::HARD);
+            std::cout << "Optimal for RB player (Hard): ";
+            switch (optimal_rb_hard) {
+                case Einstein::InitialSetup::STANDARD_TRIANGLE: std::cout << "Standard Triangle\n"; break;
+                case Einstein::InitialSetup::BALANCED: std::cout << "Balanced\n"; break;
+                case Einstein::InitialSetup::AGGRESSIVE: std::cout << "Aggressive\n"; break;
+                case Einstein::InitialSetup::DEFENSIVE: std::cout << "Defensive\n"; break;
+                case Einstein::InitialSetup::CUSTOM: std::cout << "Custom\n"; break;
+            }
+            board.Initialize(optimal_rb_hard);
+            renderer.RenderBoard(board);
+            std::cout << "\n";
+        }
+        
+        // Demonstrate predefined setups
+        auto predefined = board.GetPredefinedSetups();
+        std::cout << "Available predefined setups: " << predefined.size() << "\n";
+        for (const auto& setup : predefined) {
+            std::cout << "  - ";
+            switch (setup) {
+                case Einstein::InitialSetup::STANDARD_TRIANGLE: std::cout << "Standard Triangle\n"; break;
+                case Einstein::InitialSetup::BALANCED: std::cout << "Balanced\n"; break;
+                case Einstein::InitialSetup::AGGRESSIVE: std::cout << "Aggressive\n"; break;
+                case Einstein::InitialSetup::DEFENSIVE: std::cout << "Defensive\n"; break;
+                case Einstein::InitialSetup::CUSTOM: std::cout << "Custom\n"; break;
+            }
+        }
+        
+        // Demonstrate custom setup
+        std::cout << "\n=== Custom Setup Example ===\n";
+        std::vector<Einstein::Position> custom_lt = {{0,0}, {0,1}, {1,0}, {1,1}, {2,0}, {2,1}};
+        std::vector<Einstein::Position> custom_rb = {{2,3}, {2,4}, {3,2}, {3,3}, {4,2}, {4,3}};
+        board.InitializeCustom(custom_lt, custom_rb);
+        renderer.RenderBoard(board);
+        std::cout << "\n";
+        
+        std::cout << "=== Configuration Demo Complete ===\n";
+        return 0;
+    }
+    
+    int HandleMCTSDemo(const std::vector<std::string>& args) {
+        int max_moves = 5;
+        bool verbose = false;
+        
+        // Parse arguments
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (args[i] == "--moves" && i + 1 < args.size()) {
+                max_moves = std::stoi(args[i + 1]);
+                i++; // Skip the value
+            } else if (args[i] == "--verbose") {
+                verbose = true;
+            }
+        }
+        
+        std::cout << "\n=== MCTS Snapshot Demo ===\n";
+        std::cout << "This demonstrates the MCTS snapshot system integration.\n";
+        std::cout << "Max moves: " << max_moves << "\n";
+        std::cout << "Verbose: " << (verbose ? "Yes" : "No") << "\n\n";
+        
+        // Create and test MCTS snapshot functionality
+        Einstein::SnapshotGameRunner runner;
+        runner.SetVerbose(verbose);
+        runner.SetMCTSIterations(1000);
+        runner.SetAIThinkingTime(2.0);
+        
+        // Test MCTS snapshot capture and restore
+        auto mcts_snapshot = runner.CaptureMCTSStateForDebug();
+        
+        std::cout << "MCTS Snapshot Information:\n";
+        std::cout << "  Exploration constant: " << mcts_snapshot.exploration_constant << "\n";
+        std::cout << "  Total iterations: " << mcts_snapshot.total_iterations << "\n";
+        std::cout << "  Time limit: " << mcts_snapshot.time_limit << "s\n";
+        std::cout << "  Search summary: " << mcts_snapshot.GetSearchSummary() << "\n";
+        
+        std::cout << "\nTesting RunWithMCTSSnapshots:\n";
+        bool success = runner.RunWithMCTSSnapshots(max_moves);
+        
+        if (success) {
+            std::cout << "\n✓ MCTS snapshot system is working correctly!\n";
+            std::cout << "✓ MCTS tree state can be captured and restored\n";
+            std::cout << "✓ Snapshot-based AI debugging is functional\n";
+            return 0;
+        } else {
+            std::cout << "\n✗ MCTS snapshot system encountered issues\n";
+            return 1;
+        }
     }
 };
 

@@ -6,6 +6,44 @@ A cross-platform, high-performance implementation of the classic board game "Ein
 
 Einstein würfelt nicht! (Einstein doesn't roll dice!) is a strategic board game where players move pieces based on dice rolls. The goal is to get one of your pieces to the opponent's corner or capture all enemy pieces.
 
+## 📋 Game Rules
+
+### Quick Overview
+- **Board**: 5×5 grid with triangular starting zones
+- **Pieces**: Each player has 6 numbered pieces (1-6)
+- **Movement**: Roll dice and move corresponding piece
+- **Victory**: Reach opponent's corner or eliminate all their pieces
+
+### Detailed Rules
+For complete game rules, strategies, and examples, see: **[📖 Complete Game Rules](docs/GAME_RULES.md)**
+
+Key mechanics:
+- **Red Player**: Moves right, down, or diagonally right-down
+- **Blue Player**: Moves left, up, or diagonally left-up  
+- **Piece Selection**: Move piece matching die roll, or closest available if captured
+- **Capture**: Landing on occupied square captures that piece (including your own!)
+- **No Draws**: Games always end in victory for one player
+
+### Configurable Setups
+The modern implementation supports multiple starting configurations:
+- **Standard Triangle**: Classic Einstein formation
+- **Balanced**: Spread-out defensive positioning
+- **Aggressive**: Forward-positioned for fast gameplay
+- **Defensive**: Back-positioned for conservative play
+- **Custom**: User-defined piece placement
+
+Try different setups:
+```bash
+# View all configurations
+./EinStein_Game config-demo
+
+# Test aggressive setup
+./EinStein_Game config-demo --setup aggressive
+
+# AI-optimized positioning
+./EinStein_Game config-demo --ai-optimal
+```
+
 ## ✨ Features
 
 ### 🚀 Modern Architecture

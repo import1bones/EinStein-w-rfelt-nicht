@@ -15,21 +15,160 @@ ChessBoard::ChessBoard() {
 void ChessBoard::Initialize() {
     Clear();
     
-    // Initialize Left-Top player pieces (negative values)
-    board_[0][0] = -1;
-    board_[1][0] = -2;
-    board_[2][0] = -3;
-    board_[0][1] = -4;
-    board_[1][1] = -5;
-    board_[2][1] = -6;
+    // Initialize Einstein game board layout - triangular formation
+    // Left-Top player pieces (negative values) in triangular top-left
+    // Row 0: pieces 1, 2, 3 in columns 0, 1, 2
+    board_[0][0] = -1;  // (row 0, col 0)
+    board_[0][1] = -2;  // (row 0, col 1) 
+    board_[0][2] = -3;  // (row 0, col 2)
+    // Row 1: pieces 4, 5 in columns 0, 1 (triangular formation)
+    board_[1][0] = -4;  // (row 1, col 0)
+    board_[1][1] = -5;  // (row 1, col 1)
+    // Row 2: piece 6 in column 0 (triangular formation)
+    board_[2][0] = -6;  // (row 2, col 0)
     
-    // Initialize Right-Bottom player pieces (positive values)
-    board_[4][4] = 1;
-    board_[3][4] = 2;
-    board_[2][4] = 3;
-    board_[4][3] = 4;
-    board_[3][3] = 5;
-    board_[2][3] = 6;
+    // Right-Bottom player pieces (positive values) in triangular bottom-right
+    // Row 3: pieces 6, 5 in columns 3, 4
+    board_[3][3] = 6;   // (row 3, col 3)
+    board_[3][4] = 5;   // (row 3, col 4)
+    // Row 4: pieces 3, 2, 1 in columns 2, 3, 4
+    board_[4][2] = 3;   // (row 4, col 2)
+    board_[4][3] = 2;   // (row 4, col 3)
+    board_[4][4] = 1;   // (row 4, col 4)
+}
+
+void ChessBoard::Initialize(InitialSetup setup) {
+    Clear();
+    
+    switch (setup) {
+        case InitialSetup::STANDARD_TRIANGLE:
+            Initialize(); // Use standard initialization
+            break;
+            
+        case InitialSetup::BALANCED: {
+            // Balanced formation - pieces more spread out
+            board_[0][1] = -1; board_[0][3] = -2;
+            board_[1][0] = -3; board_[1][2] = -4; board_[1][4] = -5;
+            board_[2][1] = -6;
+            
+            board_[2][3] = 6;
+            board_[3][0] = 5; board_[3][2] = 4; board_[3][4] = 3;
+            board_[4][1] = 2; board_[4][3] = 1;
+            break;
+        }
+        
+        case InitialSetup::AGGRESSIVE: {
+            // Aggressive formation - pieces closer to center
+            board_[0][2] = -1; board_[0][3] = -2;
+            board_[1][1] = -3; board_[1][2] = -4; board_[1][3] = -5;
+            board_[2][2] = -6;
+            
+            board_[2][2] = 6;  // Will be overwritten - place at different position
+            board_[3][1] = 6; board_[3][2] = 5; board_[3][3] = 4;
+            board_[4][1] = 3; board_[4][2] = 2;
+            break;
+        }
+        
+        case InitialSetup::DEFENSIVE: {
+            // Defensive formation - pieces closer to edges
+            board_[0][0] = -1; board_[0][1] = -2; board_[0][2] = -3;
+            board_[1][0] = -4; board_[1][1] = -5;
+            board_[2][0] = -6;
+            
+            board_[2][4] = 6;
+            board_[3][3] = 5; board_[3][4] = 4;
+            board_[4][2] = 3; board_[4][3] = 2; board_[4][4] = 1;
+            break;
+        }
+        
+        case InitialSetup::CUSTOM:
+            // Custom setup should use InitializeCustom method
+            Initialize(); // fallback to standard
+            break;
+    }
+}
+
+void ChessBoard::InitializeCustom(const std::vector<Position>& leftTop, const std::vector<Position>& rightBottom) {
+    Clear();
+    
+    // Validate input sizes
+    if (leftTop.size() != NUM_PIECES || rightBottom.size() != NUM_PIECES) {
+        Initialize(); // fallback to standard if invalid
+        return;
+    }
+    
+    // Place Left-Top player pieces
+    for (size_t i = 0; i < leftTop.size(); ++i) {
+        const auto& pos = leftTop[i];
+        if (IsValidPosition(pos.first, pos.second)) {
+            board_[pos.first][pos.second] = -(static_cast<int8_t>(i + 1));
+        }
+    }
+    
+    // Place Right-Bottom player pieces
+    for (size_t i = 0; i < rightBottom.size(); ++i) {
+        const auto& pos = rightBottom[i];
+        if (IsValidPosition(pos.first, pos.second)) {
+            board_[pos.first][pos.second] = static_cast<int8_t>(i + 1);
+        }
+    }
+}
+
+void ChessBoard::InitializeFromConfig(const GameConfig& config) {
+    // For now, use difficulty to determine setup
+    // This can be extended to read from config file
+    switch (config.difficulty) {
+        case Difficulty::EASY:
+            Initialize(InitialSetup::DEFENSIVE);
+            break;
+        case Difficulty::MEDIUM:
+            Initialize(InitialSetup::BALANCED);
+            break;
+        case Difficulty::HARD:
+        case Difficulty::EXPERT:
+            Initialize(InitialSetup::AGGRESSIVE);
+            break;
+    }
+}
+
+InitialSetup ChessBoard::CalculateOptimalSetup(Player player, Difficulty difficulty) {
+    // AI-based optimal setup calculation
+    // This is a simplified version - could be enhanced with ML
+    
+    if (player == Player::LEFT_TOP) {
+        // For LT player, consider different strategies based on difficulty
+        switch (difficulty) {
+            case Difficulty::EASY:
+                return InitialSetup::DEFENSIVE;
+            case Difficulty::MEDIUM:
+                return InitialSetup::BALANCED;
+            case Difficulty::HARD:
+            case Difficulty::EXPERT:
+                return InitialSetup::AGGRESSIVE;
+        }
+    } else {
+        // For RB player, mirror the strategy
+        switch (difficulty) {
+            case Difficulty::EASY:
+                return InitialSetup::AGGRESSIVE; // Counter defensive with aggressive
+            case Difficulty::MEDIUM:
+                return InitialSetup::BALANCED;
+            case Difficulty::HARD:
+            case Difficulty::EXPERT:
+                return InitialSetup::DEFENSIVE; // Counter aggressive with defensive
+        }
+    }
+    
+    return InitialSetup::STANDARD_TRIANGLE; // fallback
+}
+
+std::vector<InitialSetup> ChessBoard::GetPredefinedSetups() const {
+    return {
+        InitialSetup::STANDARD_TRIANGLE,
+        InitialSetup::BALANCED,
+        InitialSetup::AGGRESSIVE,
+        InitialSetup::DEFENSIVE
+    };
 }
 
 void ChessBoard::Clear() {

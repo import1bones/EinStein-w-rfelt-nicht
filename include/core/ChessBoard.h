@@ -8,6 +8,18 @@
 
 namespace Einstein {
 
+// Forward declarations
+class GameConfig;
+
+// Configuration enums for initialization
+enum class InitialSetup {
+    STANDARD_TRIANGLE,     // Original Einstein triangular layout
+    BALANCED,              // Balanced defensive formation
+    AGGRESSIVE,            // Forward-positioned pieces
+    DEFENSIVE,             // Back-positioned pieces
+    CUSTOM                 // User-defined positions
+};
+
 class ChessBoard {
 public:
     ChessBoard();
@@ -16,7 +28,14 @@ public:
     
     // Board initialization
     void Initialize();
+    void Initialize(InitialSetup setup);
+    void InitializeCustom(const std::vector<Position>& leftTop, const std::vector<Position>& rightBottom);
+    void InitializeFromConfig(const GameConfig& config);
     void Clear();
+    
+    // AI-optimized initialization
+    InitialSetup CalculateOptimalSetup(Player player, Difficulty difficulty = Difficulty::MEDIUM);
+    std::vector<InitialSetup> GetPredefinedSetups() const;
     
     // Piece management
     int8_t GetPiece(int x, int y) const;
