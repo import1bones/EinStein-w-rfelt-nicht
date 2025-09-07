@@ -119,6 +119,7 @@ public:
     
     // Help
     void ShowHelp();
+    void ShowSimpleSettingsMenu();
     
 private:
     CLIRenderer renderer_;

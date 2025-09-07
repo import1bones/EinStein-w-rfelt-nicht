@@ -1,4 +1,5 @@
 #include "game/GameState.h"
+#include "ai/MCTS.h"
 #include <algorithm>
 #include <random>
 #include <fstream>
@@ -149,13 +150,29 @@ Move GameState::GetAIMove() {
         return {{-1, -1}, {-1, -1}}; // Invalid move
     }
     
-    // TODO: Implement AI move selection
+    // Use MCTS AI to select the best move
     auto valid_moves = GetValidMoves();
-    if (!valid_moves.empty()) {
-        return valid_moves[0]; // Simplified: return first valid move
+    if (valid_moves.empty()) {
+        return {{-1, -1}, {-1, -1}};
     }
     
-    return {{-1, -1}, {-1, -1}};
+    // If only one move available, return it immediately
+    if (valid_moves.size() == 1) {
+        return valid_moves[0];
+    }
+    
+    // Use MCTS to find the best move
+    auto best_move = ai_->FindBestMove(board_, current_player_, current_dice_);
+    
+    // Validate the AI's move is actually valid
+    for (const auto& move : valid_moves) {
+        if (move.first == best_move.first && move.second == best_move.second) {
+            return move;
+        }
+    }
+    
+    // Fallback: return first valid move if AI move is invalid
+    return valid_moves[0];
 }
 
 bool GameState::IsAITurn() const {
@@ -245,8 +262,19 @@ bool GameState::LoadGame(const std::string& filename) {
         return false;
     }
     
-    // TODO: Implement full game loading
-    // This is a simplified version
+    // Load game data from simple format
+    while (std::getline(file, line)) {
+        if (line.find("current_player:") != std::string::npos) {
+            int player_val = std::stoi(line.substr(line.find(":") + 1));
+            current_player_ = static_cast<Player>(player_val);
+        } else if (line.find("game_mode:") != std::string::npos) {
+            int mode_val = std::stoi(line.substr(line.find(":") + 1));
+            game_mode_ = static_cast<GameMode>(mode_val);
+        } else if (line.find("board:") != std::string::npos) {
+            // Board loading would be implemented here - simplified for now
+            board_.Initialize();
+        }
+    }
     
     return true;
 }

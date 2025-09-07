@@ -78,6 +78,7 @@ set(CORE_SOURCES
     src/utils/Config.cpp
     src/utils/CLIRenderer.cpp
     src/utils/GameSnapshot.cpp
+    src/ai/MCTS.cpp
 )
 
 set(CORE_HEADERS
@@ -86,6 +87,7 @@ set(CORE_HEADERS
     include/utils/Config.h
     include/utils/CLIRenderer.h
     include/utils/GameSnapshot.h
+    include/ai/MCTS.h
 )
 
 # AI source files (optional)

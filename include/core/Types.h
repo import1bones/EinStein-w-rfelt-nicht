@@ -66,6 +66,7 @@ struct AIConfig {
     int mcts_iterations = 1000;
     double exploration_constant = 1.414;  // sqrt(2)
     bool use_neural_network = true;
+    bool enable_multithreading = true;
     int thread_count = 4;
     double thinking_time = 5.0;  // seconds
 };

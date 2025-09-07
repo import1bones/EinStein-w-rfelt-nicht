@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Types.h"
+#include "core/ChessBoard.h"
 #include <memory>
 #include <vector>
 #include <random>
@@ -25,7 +26,8 @@ struct MCTSNode {
     std::vector<std::shared_ptr<MCTSNode>> children;
     
     std::atomic<int> visits{0};
-    std::atomic<double> wins{0.0};
+    std::atomic<int> wins_int{0};  // Store wins * 1000 to avoid floating point atomics
+    mutable std::mutex wins_mutex;
     
     bool is_fully_expanded = false;
     bool is_terminal = false;
@@ -38,6 +40,7 @@ struct MCTSNode {
     bool IsFullyExpanded() const;
     std::shared_ptr<MCTSNode> SelectBestChild(double exploration_constant) const;
     void Backpropagate(GameResult result, Player winner);
+    double GetWinRate() const;
 };
 
 class MCTS {

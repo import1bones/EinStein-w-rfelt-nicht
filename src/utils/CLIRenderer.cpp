@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <thread>
 #include <chrono>
+#include <fstream>
 
 namespace Einstein {
 
@@ -374,7 +375,7 @@ int CLIGameController::RunInteractiveGame() {
             return RunAnalysisMode(file);
         } else if (choice == "5") {
             // Settings menu
-            renderer_.PrintInfo("Settings not implemented yet");
+            ShowSimpleSettingsMenu();
         } else if (choice == "6") {
             ShowHelp();
         } else if (choice == "7") {
@@ -578,7 +579,22 @@ int CLIGameController::RunAnalysisMode(const std::string& game_file) {
         return RunHumanvsAI();
     } else {
         renderer_.PrintInfo("Analyzing game file: " + game_file);
-        renderer_.PrintWarning("File analysis not implemented yet");
+        
+        // Basic file analysis
+        std::ifstream file(game_file);
+        if (!file.is_open()) {
+            renderer_.PrintError("Cannot open file: " + game_file);
+            return 1;
+        }
+        
+        int line_count = 0;
+        std::string line;
+        while (std::getline(file, line)) {
+            line_count++;
+        }
+        
+        renderer_.PrintSuccess("File analysis complete:");
+        renderer_.PrintInfo("Total lines: " + std::to_string(line_count));
         return 0;
     }
 }
@@ -592,6 +608,16 @@ void CLIGameController::ShowHelp() {
     std::cout << std::endl;
     std::cout << "Move notation: 'a1 b2' or just select from numbered list" << std::endl;
     std::cout << "Commands: Type move or select number, 'help', 'quit'" << std::endl;
+    renderer_.Pause();
+}
+
+void CLIGameController::ShowSimpleSettingsMenu() {
+    renderer_.PrintTitle("Game Settings");
+    renderer_.PrintInfo("Current settings:");
+    renderer_.PrintInfo("- Verbose mode: " + std::string(verbose_ ? "ON" : "OFF"));
+    renderer_.PrintInfo("- AI Difficulty: " + std::to_string(ai_difficulty_));
+    renderer_.PrintInfo("- Time limit: " + std::to_string(time_limit_) + "s");
+    renderer_.PrintInfo("Settings modification in future versions.");
     renderer_.Pause();
 }
 

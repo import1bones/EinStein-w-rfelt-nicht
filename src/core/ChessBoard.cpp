@@ -17,23 +17,25 @@ void ChessBoard::Initialize() {
     
     // Initialize Einstein game board layout - triangular formation
     // Left-Top player pieces (negative values) in triangular top-left
-    // Row 0: pieces 1, 2, 3 in columns 0, 1, 2
+    // Row 0: pieces 1, 4, 6 in columns 0, 1, 2
     board_[0][0] = -1;  // (row 0, col 0)
-    board_[0][1] = -2;  // (row 0, col 1) 
-    board_[0][2] = -3;  // (row 0, col 2)
-    // Row 1: pieces 4, 5 in columns 0, 1 (triangular formation)
-    board_[1][0] = -4;  // (row 1, col 0)
+    board_[0][1] = -4;  // (row 0, col 1) 
+    board_[0][2] = -6;  // (row 0, col 2)
+    // Row 1: pieces 2, 5 in columns 0, 1 (triangular formation)
+    board_[1][0] = -2;  // (row 1, col 0)
     board_[1][1] = -5;  // (row 1, col 1)
-    // Row 2: piece 6 in column 0 (triangular formation)
-    board_[2][0] = -6;  // (row 2, col 0)
+    // Row 2: piece 3 in column 0 (triangular formation)
+    board_[2][0] = -3;  // (row 2, col 0)
     
     // Right-Bottom player pieces (positive values) in triangular bottom-right
-    // Row 3: pieces 6, 5 in columns 3, 4
+    // Row 2: piece 3 in column 4 (triangular formation)
+    board_[2][4] = 3;   // (row 2, col 4)
+    // Row 3: pieces 6, 2 in columns 3, 4
     board_[3][3] = 6;   // (row 3, col 3)
-    board_[3][4] = 5;   // (row 3, col 4)
-    // Row 4: pieces 3, 2, 1 in columns 2, 3, 4
-    board_[4][2] = 3;   // (row 4, col 2)
-    board_[4][3] = 2;   // (row 4, col 3)
+    board_[3][4] = 2;   // (row 3, col 4)
+    // Row 4: pieces 5, 4, 1 in columns 2, 3, 4
+    board_[4][2] = 5;   // (row 4, col 2)
+    board_[4][3] = 4;   // (row 4, col 3)
     board_[4][4] = 1;   // (row 4, col 4)
 }
 

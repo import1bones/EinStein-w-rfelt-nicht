@@ -11,17 +11,25 @@ namespace Einstein {
 MCTSNode::MCTSNode(const ChessBoard& board_state, Player player, int dice, const Move& move)
     : board(board_state), current_player(player), dice_value(dice), last_move(move) {
     visits.store(0);
-    wins.store(0.0);
+    wins_int.store(0);
+}
+
+double MCTSNode::GetWinRate() const {
+    int visit_count = visits.load();
+    if (visit_count == 0) return 0.0;
+    return static_cast<double>(wins_int.load()) / (visit_count * 1000.0);
 }
 
 double MCTSNode::GetUCBValue(double exploration_constant) const {
-    if (visits.load() == 0) {
-        return std::numeric_limits<double>::infinity();
-    }
+    int visit_count = visits.load();
+    if (visit_count == 0) return std::numeric_limits<double>::max();
     
-    double exploitation = wins.load() / visits.load();
-    double exploration = exploration_constant * std::sqrt(std::log(parent->visits.load()) / visits.load());
-    return exploitation + exploration;
+    if (parent == nullptr) return 0.0;
+    
+    double exploitation = GetWinRate();
+    double exploration = std::sqrt(std::log(parent->visits.load()) / visit_count);
+    
+    return exploitation + exploration_constant * exploration;
 }
 
 bool MCTSNode::IsFullyExpanded() const {
@@ -41,21 +49,18 @@ std::shared_ptr<MCTSNode> MCTSNode::SelectBestChild(double exploration_constant)
     return *best_child;
 }
 
-void MCTSNode::Backpropagate(GameResult game_result, Player winner) {
+void MCTSNode::Backpropagate(GameResult result, Player winner) {
     visits.fetch_add(1);
     
-    // Update win count based on perspective
-    if (game_result == GameResult::DRAW) {
-        wins.fetch_add(0.5);  // Draw is worth 0.5 points
-    } else if ((winner == Player::LEFT_TOP && current_player == Player::LEFT_TOP) ||
-               (winner == Player::RIGHT_BOTTOM && current_player == Player::RIGHT_BOTTOM)) {
-        wins.fetch_add(1.0);  // Win for current player
+    std::lock_guard<std::mutex> lock(wins_mutex);
+    if (result == GameResult::DRAW) {
+        wins_int.fetch_add(500);  // 0.5 * 1000 (Draw is worth 0.5 points)
+    } else if ((winner == current_player && result != GameResult::ONGOING) ||
+               (current_player == Player::LEFT_TOP && result == GameResult::LT_WINS) ||
+               (current_player == Player::RIGHT_BOTTOM && result == GameResult::RB_WINS)) {
+        wins_int.fetch_add(1000);  // 1.0 * 1000 (Win for current player)
     }
-    // Loss = 0 points (no addition needed)
-    
-    if (parent) {
-        parent->Backpropagate(game_result, winner);
-    }
+    // Loss: no change to wins_int (already 0)
 }
 
 // MCTS implementation
