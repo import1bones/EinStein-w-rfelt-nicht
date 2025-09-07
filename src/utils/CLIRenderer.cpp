@@ -475,7 +475,7 @@ bool CLIGameController::ProcessHumanTurn(GameState& game_state) {
     Move move = renderer_.GetMoveFromUser(board, player, dice);
     if (move.first.first == -1) {
         renderer_.PrintWarning("No valid moves - turn skipped");
-        // Skip turn - need to implement this in GameState
+        game_state.SkipTurn();
         return true;
     }
     
@@ -493,13 +493,7 @@ bool CLIGameController::ProcessAITurn(GameState& game_state) {
     
     auto start_time = std::chrono::high_resolution_clock::now();
     
-    // Simulate AI thinking with progress indicator
-    for (int i = 0; i < 10; ++i) {
-        std::cout << "." << std::flush;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    std::cout << std::endl;
-    
+    // Use real MCTS AI instead of simulation
     Move ai_move = GetAIMove(game_state);
     
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -507,7 +501,7 @@ bool CLIGameController::ProcessAITurn(GameState& game_state) {
     
     if (ai_move.first.first == -1) {
         renderer_.PrintWarning("AI has no valid moves - turn skipped");
-        // Skip turn - need to implement this in GameState
+        game_state.SkipTurn();
         return true;
     }
     
@@ -531,11 +525,27 @@ Move CLIGameController::GetAIMove(const GameState& game_state) {
         return {{-1, -1}, {-1, -1}};
     }
     
-    // For now, implement simple AI that picks a random valid move
-    // This will be replaced with MCTS later
-    std::srand(std::time(nullptr));
-    int random_index = std::rand() % valid_moves.size();
-    return valid_moves[random_index];
+    // Use MCTS AI for intelligent move selection
+    AIConfig ai_config;
+    ai_config.mcts_iterations = 1000 * ai_difficulty_;
+    ai_config.thinking_time = time_limit_;
+    ai_config.exploration_constant = 1.414;
+    ai_config.enable_multithreading = true;
+    ai_config.thread_count = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) / 2);
+    
+    MCTS mcts(ai_config);
+    
+    // Get best move from MCTS
+    Move best_move = mcts.FindBestMove(board, player, dice);
+    
+    // Fallback to random if MCTS fails
+    if (best_move.first.first == -1) {
+        std::srand(std::time(nullptr));
+        int random_index = std::rand() % valid_moves.size();
+        return valid_moves[random_index];
+    }
+    
+    return best_move;
 }
 
 void CLIGameController::ShowGameResult(const GameState& game_state) {

@@ -82,6 +82,15 @@ bool GameState::MakeMove(const Move& move) {
     return true;
 }
 
+void GameState::SkipTurn() {
+    // Switch player and roll new dice without making a move
+    SwitchPlayer();
+    current_dice_ = RollDice();
+    
+    // Check for game end (in case both players have no moves)
+    CheckGameEnd();
+}
+
 bool GameState::CanUndo() const {
     return current_move_index_ > 0;
 }

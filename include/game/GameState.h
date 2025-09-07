@@ -66,6 +66,7 @@ public:
     
     // Move management
     bool MakeMove(const Move& move);
+    void SkipTurn(); // Skip turn when no valid moves available
     bool CanUndo() const;
     bool UndoMove();
     bool CanRedo() const;
