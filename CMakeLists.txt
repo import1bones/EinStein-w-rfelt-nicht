@@ -78,6 +78,7 @@ set(CORE_SOURCES
     src/utils/Config.cpp
     src/utils/CLIRenderer.cpp
     src/utils/GameSnapshot.cpp
+    src/utils/Logger.cpp
     src/ai/MCTS.cpp
 )
 
@@ -87,6 +88,7 @@ set(CORE_HEADERS
     include/utils/Config.h
     include/utils/CLIRenderer.h
     include/utils/GameSnapshot.h
+    include/utils/Logger.h
     include/ai/MCTS.h
 )
 

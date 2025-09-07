@@ -40,14 +40,15 @@ void CLIRenderer::RenderBoard(const ChessBoard& board) {
     PrintSeparator('-', 25);
     std::cout << "   ";
     for (int x = 0; x < BOARD_SIZE; ++x) {
-        std::cout << " " << x << " ";
+        char col = 'a' + x;
+        std::cout << " " << col << " ";
     }
     std::cout << std::endl;
     
     PrintSeparator('-', 25);
     
     for (int y = 0; y < BOARD_SIZE; ++y) {
-        std::cout << " " << y << " |";
+        std::cout << " " << (y + 1) << " |";
         for (int x = 0; x < BOARD_SIZE; ++x) {
             int8_t piece = board.GetPiece(x, y);
             std::string symbol = GetPieceSymbol(piece);

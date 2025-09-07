@@ -17,12 +17,8 @@
 #include "utils/CLIRenderer.h"
 #include "utils/GameSnapshot.h"
 #include "core/ChessBoard.h"
-
-// Note: These headers would be available after full refactoring
-// #include "game/Game.h"
-// #include "graphics/Renderer.h"
-// #include "utils/Logger.h"
-// #include "utils/Config.h"
+#include "utils/Logger.h"
+#include "utils/Config.h"
 
 /**
  * Modern Einstein Game - Refactored Version with CLI Interface
@@ -32,54 +28,20 @@
 
 namespace Einstein {
 
-// Placeholder classes for demonstration
-class Logger {
-public:
-    static void Initialize() {
-        std::cout << "[LOG] Logger initialized\n";
-    }
-    
-    template<typename... Args>
-    static void Info(const std::string& format, Args&&... /*args*/) {
-        std::cout << "[INFO] " << format << std::endl;
-    }
-    
-    template<typename... Args>
-    static void Error(const std::string& format, Args&&... /*args*/) {
-        std::cerr << "[ERROR] " << format << std::endl;
-    }
-};
-
-class Config {
-public:
-    static bool Load(const std::string& file) {
-        Logger::Info("Loading configuration from: " + file);
-        return true; // Placeholder
-    }
-    
-    static std::string GetString(const std::string& /*key*/, const std::string& default_val = "") {
-        return default_val; // Placeholder
-    }
-    
-    static int GetInt(const std::string& /*key*/, int default_val = 0) {
-        return default_val; // Placeholder
-    }
-};
-
 class Game {
 public:
     Game() {
-        Logger::Info("Game instance created");
+        Logger::Instance().Info("Game instance created");
     }
     
     bool Initialize() {
-        Logger::Info("Initializing game...");
+        Logger::Instance().Info("Initializing game...");
         // Initialize SDL2, load assets, setup AI, etc.
         return true;
     }
     
     void Run() {
-        Logger::Info("Starting game loop...");
+        Logger::Instance().Info("Starting game loop...");
         
         auto start_time = std::chrono::steady_clock::now();
         bool running = true;
@@ -94,23 +56,24 @@ public:
             frame_count++;
             
             if (frame_count % 5 == 0) {
-                Logger::Info("Game running... Frame: " + std::to_string(frame_count));
+                Logger::Instance().Info("Game running... Frame: " + std::to_string(frame_count));
             }
         }
         
         auto end_time = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         
-        Logger::Info("Game ended after " + std::to_string(duration.count()) + "ms");
+        Logger::Instance().Info("Game ended after " + std::to_string(duration.count()) + "ms");
     }
     
     void Shutdown() {
-        Logger::Info("Shutting down game...");
+        Logger::Instance().Info("Shutting down game...");
+        Logger::Instance().Shutdown();
     }
     
     // CLI-specific methods for automation
     bool RunSelfPlay(int games = 100, const std::string& output_file = "") {
-        Logger::Info("Starting self-play mode: " + std::to_string(games) + " games");
+        Logger::Instance().Info("Starting self-play mode: " + std::to_string(games) + " games");
         
         int ai1_wins = 0, ai2_wins = 0, draws = 0;
         
@@ -125,7 +88,7 @@ public:
             }
             
             if ((i + 1) % 10 == 0) {
-                Logger::Info("Progress: " + std::to_string(i + 1) + "/" + std::to_string(games) + " games");
+                Logger::Instance().Info("Progress: " + std::to_string(i + 1) + "/" + std::to_string(games) + " games");
             }
         }
         
@@ -143,7 +106,7 @@ public:
             if (file.is_open()) {
                 file << results;
                 file.close();
-                Logger::Info("Results saved to: " + output_file);
+                Logger::Instance().Info("Results saved to: " + output_file);
             }
         }
         
@@ -151,7 +114,7 @@ public:
     }
     
     bool RunBenchmark(int iterations = 1000) {
-        Logger::Info("Starting benchmark with " + std::to_string(iterations) + " iterations");
+        Logger::Instance().Info("Starting benchmark with " + std::to_string(iterations) + " iterations");
         
         auto start_time = std::chrono::high_resolution_clock::now();
         
@@ -174,16 +137,16 @@ public:
     }
     
     bool ValidateConfiguration(const std::string& config_file) {
-        Logger::Info("Validating configuration: " + config_file);
+        Logger::Instance().Info("Validating configuration: " + config_file);
         
         // Simulate config validation
         std::ifstream file(config_file);
         if (!file.is_open()) {
-            Logger::Error("Cannot open config file: " + config_file);
+            Logger::Instance().Error("Cannot open config file: " + config_file);
             return false;
         }
         
-        Logger::Info("Configuration is valid");
+        Logger::Instance().Info("Configuration is valid");
         return true;
     }
 };
@@ -322,19 +285,20 @@ private:
     }
     
     int RunInteractiveMode() {
-        Einstein::Logger::Initialize();
-        Einstein::Logger::Info("=== Einstein Game - Interactive Mode ===");
+        Logger::Instance().Initialize("assets/config.json");
+        Logger::Instance().Info("=== Einstein Game - Interactive Mode ===");
         
         std::string config_file = "assets/config.json";
-        if (!Einstein::Config::Load(config_file)) {
-            Einstein::Logger::Error("Failed to load configuration");
+        Config config;
+        if (!config.LoadFromFile(config_file)) {
+            Logger::Instance().Error("Failed to load configuration");
             return 1;
         }
         
         auto game = std::make_unique<Einstein::Game>();
         
         if (!game->Initialize()) {
-            Einstein::Logger::Error("Failed to initialize game");
+            Logger::Instance().Error("Failed to initialize game");
             return 1;
         }
         
@@ -452,7 +416,7 @@ private:
             }
         }
         
-        Einstein::Logger::Initialize();
+        Logger::Instance().Initialize("assets/config.json");
         auto game = std::make_unique<Einstein::Game>();
         
         if (!game->Initialize()) {
@@ -477,7 +441,7 @@ private:
             }
         }
         
-        Einstein::Logger::Initialize();
+        Logger::Instance().Initialize("assets/config.json");
         auto game = std::make_unique<Einstein::Game>();
         
         if (!game->Initialize()) {
@@ -498,7 +462,7 @@ private:
         }
         
         const std::string& config_file = args[1];
-        Einstein::Logger::Initialize();
+        Logger::Instance().Initialize("assets/config.json");
         
         auto game = std::make_unique<Einstein::Game>();
         bool success = game->ValidateConfiguration(config_file);
