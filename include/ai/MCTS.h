@@ -22,7 +22,7 @@ struct MCTSNode {
     int dice_value;
     Move last_move;
     
-    std::shared_ptr<MCTSNode> parent;
+    std::weak_ptr<MCTSNode> parent;  // Use weak_ptr to avoid circular reference
     std::vector<std::shared_ptr<MCTSNode>> children;
     
     std::atomic<int> visits{0};
@@ -80,7 +80,7 @@ private:
     
     // Helper functions
     std::vector<Move> GetAllPossibleMoves(const ChessBoard& board, Player player, int dice);
-    GameResult EvaluateGameState(const ChessBoard& board, Player current_player);
+    GameResult EvaluateGameState(const ChessBoard& board);
     Player GetOpponent(Player player) const;
     int RollDice();
     

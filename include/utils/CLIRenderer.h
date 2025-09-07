@@ -29,7 +29,7 @@ public:
 
     // Core rendering methods
     void RenderGame(const GameState& game_state);
-    void RenderBoard(const ChessBoard& board);
+    void RenderBoard(const ChessBoard& board, const Move& last_move = {{-1, -1}, {-1, -1}});
     void RenderGameInfo(const GameState& game_state);
     void RenderMoveHistory(const GameState& game_state, int last_moves = 10);
     void RenderAIThinking(const std::string& ai_info);

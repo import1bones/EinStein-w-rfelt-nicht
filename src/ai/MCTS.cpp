@@ -24,10 +24,11 @@ double MCTSNode::GetUCBValue(double exploration_constant) const {
     int visit_count = visits.load();
     if (visit_count == 0) return std::numeric_limits<double>::max();
     
-    if (parent == nullptr) return 0.0;
+    auto parent_ptr = parent.lock();
+    if (parent_ptr == nullptr) return 0.0;
     
     double exploitation = GetWinRate();
-    double exploration = std::sqrt(std::log(parent->visits.load()) / visit_count);
+    double exploration = std::sqrt(std::log(parent_ptr->visits.load()) / visit_count);
     
     return exploitation + exploration_constant * exploration;
 }
@@ -61,6 +62,12 @@ void MCTSNode::Backpropagate(GameResult result, Player winner) {
         wins_int.fetch_add(1000);  // 1.0 * 1000 (Win for current player)
     }
     // Loss: no change to wins_int (already 0)
+    
+    // Recursively propagate up the tree
+    auto parent_ptr = parent.lock();
+    if (parent_ptr != nullptr) {
+        parent_ptr->Backpropagate(result, winner);
+    }
 }
 
 // MCTS implementation
@@ -194,7 +201,7 @@ std::shared_ptr<MCTSNode> MCTS::Expansion(std::shared_ptr<MCTSNode> node) {
     
     if (valid_moves.empty()) {
         node->is_terminal = true;
-        node->result = EvaluateGameState(node->board, node->current_player);
+        node->result = EvaluateGameState(node->board);
         return node;
     }
     
@@ -278,7 +285,7 @@ std::vector<Move> MCTS::GetAllPossibleMoves(const ChessBoard& board, Player play
     return board.GetValidMoves(player, dice);
 }
 
-GameResult MCTS::EvaluateGameState(const ChessBoard& board, Player current_player) {
+GameResult MCTS::EvaluateGameState(const ChessBoard& board) {
     if (board.HasPlayerWon(Player::LEFT_TOP)) {
         return GameResult::LT_WINS;
     }

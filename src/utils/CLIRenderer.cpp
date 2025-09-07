@@ -1,4 +1,5 @@
 #include "utils/CLIRenderer.h"
+#include "utils/Logger.h"
 #include "ai/MCTS.h"
 #include <iostream>
 #include <iomanip>
@@ -21,6 +22,9 @@ const std::string CLIRenderer::CYAN = "\033[36m";
 const std::string CLIRenderer::WHITE = "\033[37m";
 const std::string CLIRenderer::BOLD = "\033[1m";
 
+// Background colors for highlighting
+const std::string YELLOW_BG = "\033[43m";
+
 CLIRenderer::CLIRenderer() : use_colors_(true), verbose_(false) {}
 
 void CLIRenderer::RenderGame(const GameState& game_state) {
@@ -28,7 +32,15 @@ void CLIRenderer::RenderGame(const GameState& game_state) {
     PrintTitle("Einstein Game - CLI Mode");
     RenderGameInfo(game_state);
     std::cout << std::endl;
-    RenderBoard(game_state.GetBoard());
+    
+    // Get the last move for highlighting, if available
+    Move last_move = {{-1, -1}, {-1, -1}};
+    const GameMove* last_game_move = game_state.GetLastMove();
+    if (last_game_move != nullptr) {
+        last_move = last_game_move->move;
+    }
+    
+    RenderBoard(game_state.GetBoard(), last_move);
     std::cout << std::endl;
     if (verbose_) {
         RenderMoveHistory(game_state);
@@ -36,7 +48,7 @@ void CLIRenderer::RenderGame(const GameState& game_state) {
     }
 }
 
-void CLIRenderer::RenderBoard(const ChessBoard& board) {
+void CLIRenderer::RenderBoard(const ChessBoard& board, const Move& last_move) {
     PrintSeparator('-', 25);
     std::cout << "   ";
     for (int x = 0; x < BOARD_SIZE; ++x) {
@@ -53,12 +65,29 @@ void CLIRenderer::RenderBoard(const ChessBoard& board) {
             int8_t piece = board.GetPiece(x, y);
             std::string symbol = GetPieceSymbol(piece);
             
+            // Check if this position is part of the last move (from or to position)
+            bool is_last_move_position = (last_move.first.first != -1) && 
+                                       ((last_move.first.first == x && last_move.first.second == y) ||
+                                        (last_move.second.first == x && last_move.second.second == y));
+            
             if (piece > 0) {
-                std::cout << ColorText(symbol, GREEN);
+                if (is_last_move_position) {
+                    std::cout << YELLOW_BG << ColorText(symbol, GREEN) << RESET;
+                } else {
+                    std::cout << ColorText(symbol, GREEN);
+                }
             } else if (piece < 0) {
-                std::cout << ColorText(symbol, RED);
+                if (is_last_move_position) {
+                    std::cout << YELLOW_BG << ColorText(symbol, RED) << RESET;
+                } else {
+                    std::cout << ColorText(symbol, RED);
+                }
             } else {
-                std::cout << " . ";
+                if (is_last_move_position) {
+                    std::cout << YELLOW_BG << " . " << RESET;
+                } else {
+                    std::cout << " . ";
+                }
             }
         }
         std::cout << "|" << std::endl;
@@ -475,15 +504,19 @@ bool CLIGameController::ProcessHumanTurn(GameState& game_state) {
     Move move = renderer_.GetMoveFromUser(board, player, dice);
     if (move.first.first == -1) {
         renderer_.PrintWarning("No valid moves - turn skipped");
+        Logger::Instance().Info("Human player " + std::to_string(static_cast<int>(player)) + " skipped turn (no valid moves)");
         game_state.SkipTurn();
         return true;
     }
     
     if (game_state.MakeMove(move)) {
-        renderer_.PrintSuccess("Move executed: " + renderer_.FormatMove(move));
+        std::string move_str = renderer_.FormatMove(move);
+        renderer_.PrintSuccess("Move executed: " + move_str);
+        Logger::Instance().Info("Human player " + std::to_string(static_cast<int>(player)) + " moved: " + move_str);
         return true;
     } else {
         renderer_.PrintError("Failed to execute move");
+        Logger::Instance().Error("Human player " + std::to_string(static_cast<int>(player)) + " failed to execute move: " + renderer_.FormatMove(move));
         return false;
     }
 }
@@ -501,16 +534,20 @@ bool CLIGameController::ProcessAITurn(GameState& game_state) {
     
     if (ai_move.first.first == -1) {
         renderer_.PrintWarning("AI has no valid moves - turn skipped");
+        Logger::Instance().Info("AI player " + std::to_string(static_cast<int>(game_state.GetCurrentPlayer())) + " skipped turn (no valid moves)");
         game_state.SkipTurn();
         return true;
     }
     
     if (game_state.MakeMove(ai_move)) {
-        renderer_.PrintSuccess("AI move: " + renderer_.FormatMove(ai_move) + 
-                              " (" + renderer_.FormatTime(thinking_time) + ")");
+        std::string move_str = renderer_.FormatMove(ai_move);
+        std::string time_str = renderer_.FormatTime(thinking_time);
+        renderer_.PrintSuccess("AI move: " + move_str + " (" + time_str + ")");
+        Logger::Instance().Info("AI player " + std::to_string(static_cast<int>(game_state.GetCurrentPlayer())) + " moved: " + move_str + " (thinking time: " + time_str + ")");
         return true;
     } else {
         renderer_.PrintError("AI failed to execute move");
+        Logger::Instance().Error("AI player " + std::to_string(static_cast<int>(game_state.GetCurrentPlayer())) + " failed to execute move: " + renderer_.FormatMove(ai_move));
         return false;
     }
 }

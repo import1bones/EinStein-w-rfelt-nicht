@@ -118,7 +118,8 @@ int CLIInterface::Execute(int argc, char* argv[]) {
 }
 
 int CLIInterface::HandleRun(const std::vector<std::string>&) {
-    // Initialize logging
+    // Initialize logging with config file
+    Logger::Instance().Initialize("assets/config.json");
     Logger::Instance().Info("Starting Einstein Game CLI");
     
     try {
