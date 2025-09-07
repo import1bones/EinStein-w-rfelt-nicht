@@ -12,7 +12,7 @@
 namespace Einstein {
 
 // Forward declarations
-class MCTSNode;
+struct MCTSNode;
 class MCTS;
 
 /**

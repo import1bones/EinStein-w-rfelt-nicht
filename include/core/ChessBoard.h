@@ -9,7 +9,7 @@
 namespace Einstein {
 
 // Forward declarations
-class GameConfig;
+struct GameConfig;
 
 // Configuration enums for initialization
 enum class InitialSetup {
