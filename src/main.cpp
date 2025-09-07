@@ -40,12 +40,12 @@ public:
     }
     
     template<typename... Args>
-    static void Info(const std::string& format, Args&&... args) {
+    static void Info(const std::string& format, Args&&... /*args*/) {
         std::cout << "[INFO] " << format << std::endl;
     }
     
     template<typename... Args>
-    static void Error(const std::string& format, Args&&... args) {
+    static void Error(const std::string& format, Args&&... /*args*/) {
         std::cerr << "[ERROR] " << format << std::endl;
     }
 };
@@ -57,11 +57,11 @@ public:
         return true; // Placeholder
     }
     
-    static std::string GetString(const std::string& key, const std::string& default_val = "") {
+    static std::string GetString(const std::string& /*key*/, const std::string& default_val = "") {
         return default_val; // Placeholder
     }
     
-    static int GetInt(const std::string& key, int default_val = 0) {
+    static int GetInt(const std::string& /*key*/, int default_val = 0) {
         return default_val; // Placeholder
     }
 };
