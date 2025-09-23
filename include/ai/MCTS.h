@@ -72,6 +72,8 @@ public:
         Move move;
         int visits = 0;
         double win_rate = 0.0; // 0..1
+        double prior = 0.0; // prior probability from policy/net
+        int virtual_loss = 0; // virtual loss for parallelization
         double ucb = 0.0;
         bool terminal = false;
         std::vector<ExportNode> children;

@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(EinStein_Game VERSION 2.0.0 LANGUAGES CXX)
 
+# Default install prefix: project-local 'install' directory (avoid system locations)
+if(NOT CMAKE_INSTALL_PREFIX)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/install" CACHE PATH "Install path" FORCE)
+endif()
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,6 +35,48 @@ endif()
 
 # Find required packages
 find_package(Threads REQUIRED)
+
+# Option to use nlohmann::json (try find_package first, then FetchContent fallback)
+option(USE_NLOHMANN_JSON "Try to use nlohmann/json for JSON handling (find or fetch)" ON)
+if(USE_NLOHMANN_JSON)
+    # If repository already vendors a single-header at include/third_party/json.hpp, prefer it
+    if(EXISTS "${CMAKE_SOURCE_DIR}/include/third_party/json.hpp")
+        message(STATUS "Found vendored single-header json.hpp; using it")
+        add_compile_definitions(USE_NLOHMANN_JSON=1)
+        set(HAVE_NLOHMANN_JSON TRUE)
+    else()
+        include(FetchContent)
+        # Prefer find_package if nlohmann_json is already installed on the system
+        find_package(nlohmann_json QUIET)
+        if(NOT nlohmann_json_FOUND)
+            # Check network/git access before attempting a remote clone to avoid hard failure
+            execute_process(COMMAND git ls-remote https://github.com/nlohmann/json.git HEAD
+                            RESULT_VARIABLE GIT_LS_OK
+                            TIMEOUT 10
+                            OUTPUT_QUIET ERROR_QUIET)
+            if(GIT_LS_OK EQUAL 0)
+                message(STATUS "nlohmann_json not found via find_package; Fetching from github...")
+                FetchContent_Declare(
+                    nlohmann_json
+                    GIT_REPOSITORY https://github.com/nlohmann/json.git
+                    GIT_TAG v3.11.2
+                )
+                FetchContent_MakeAvailable(nlohmann_json)
+            else()
+                message(WARNING "nlohmann_json not found and remote repository unreachable; continuing without it")
+            endif()
+        endif()
+        if(TARGET nlohmann_json::nlohmann_json)
+            set(HAVE_NLOHMANN_JSON TRUE)
+            message(STATUS "nlohmann::json available and will be linked into targets")
+        else()
+            message(STATUS "nlohmann::json is not available; continuing without it")
+        endif()
+    endif()
+endif()
+
+# nlohmann_json was previously attempted via FetchContent, but to avoid CMake
+# compatibility issues we vendor a small JSON header in include/third_party.
 
 # Try to find SDL2 - make it optional for now to allow partial builds
 find_package(SDL2 QUIET)
@@ -157,6 +204,11 @@ target_link_libraries(${PROJECT_NAME}
     Threads::Threads
 )
 
+if(HAVE_NLOHMANN_JSON)
+    target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_NLOHMANN_JSON=1)
+endif()
+
 if(GRAPHICS_AVAILABLE)
     target_link_libraries(${PROJECT_NAME}
         ${SDL2_LIBRARIES}
@@ -208,7 +260,7 @@ set_target_properties(${PROJECT_NAME}_tests PROPERTIES
 )
 
 target_link_libraries(${PROJECT_NAME}_tests Threads::Threads)
-target_include_directories(${PROJECT_NAME}_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME}_tests PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests)
 
 # Build V-Model test framework
 add_executable(${PROJECT_NAME}_vmodel_tests 
@@ -222,7 +274,7 @@ set_target_properties(${PROJECT_NAME}_vmodel_tests PROPERTIES
 )
 
 target_link_libraries(${PROJECT_NAME}_vmodel_tests Threads::Threads)
-target_include_directories(${PROJECT_NAME}_vmodel_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME}_vmodel_tests PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests)
 
 # Register tests with CTest
 add_test(NAME unit_tests COMMAND ${PROJECT_NAME}_tests)
@@ -266,9 +318,8 @@ message(STATUS "Threading support: ON")
 message(STATUS "Testing support: ON")
 message(STATUS "==========================================")
 # 自动复制 compile_commands.json 到项目根目录
-add_custom_command(
-    TARGET EinStein_Game POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_BINARY_DIR}/compile_commands.json
-        ${CMAKE_SOURCE_DIR}/compile_commands.json
-)
+## The project previously copied compile_commands.json to the source root after build
+## but this can fail in some environments (file locks/permissions). If you need
+## compile_commands.json in the repo root, run:
+##   cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .. && cp build/compile_commands.json .
+

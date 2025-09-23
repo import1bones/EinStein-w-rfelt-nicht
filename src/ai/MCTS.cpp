@@ -153,6 +153,10 @@ MCTS::ExportNode MCTS::ExportSearchTree(int max_depth, int max_children) const {
         out.visits = node->visits.load();
         out.win_rate = node->GetWinRate();
         out.ucb = node->GetUCBValue(1.414); // exploration constant snapshot
+        // If the node has policy/prior info or virtual loss, populate if present
+        // (not all implementations have these; default to 0)
+        out.prior = 0.0;
+        out.virtual_loss = 0;
         out.terminal = node->is_terminal;
         if (depth >= max_depth) return;
         std::vector<std::shared_ptr<MCTSNode>> kids;

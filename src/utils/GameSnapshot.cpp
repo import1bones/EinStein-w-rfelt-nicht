@@ -8,6 +8,10 @@
 #include <ctime>
 #include <random>
 #include <thread>
+#include "third_party/json_adapter.hpp"
+using ein_json::Value;
+using ein_json::Object;
+using ein_json::Array;
 
 namespace Einstein {
 
@@ -106,101 +110,96 @@ std::string MCTSSnapshot::ToString() const {
 
 // Simple JSON serialization for MCTSSnapshot (no external deps)
 std::string MCTSSnapshot::ToJson() const {
-    std::ostringstream oss;
-    oss << "{\n";
-    oss << "  \"total_iterations\": " << total_iterations << ",\n";
-    oss << "  \"completed_iterations\": " << completed_iterations << ",\n";
-    oss << "  \"exploration_constant\": " << exploration_constant << ",\n";
-    oss << "  \"time_limit\": " << time_limit << ",\n";
-    oss << "  \"elapsed_time\": " << elapsed_time << ",\n";
-    oss << "  \"best_evaluation\": " << best_evaluation << ",\n";
-    oss << "  \"nodes_created\": " << nodes_created << ",\n";
-    oss << "  \"nodes_expanded\": " << nodes_expanded << ",\n";
-    oss << "  \"avg_simulation_time\": " << avg_simulation_time << ",\n";
+    Object j;
+    j["total_iterations"] = Value(total_iterations);
+    j["completed_iterations"] = Value(completed_iterations);
+    j["exploration_constant"] = Value(exploration_constant);
+    j["time_limit"] = Value(time_limit);
+    j["elapsed_time"] = Value(elapsed_time);
+    j["best_evaluation"] = Value(best_evaluation);
+    j["nodes_created"] = Value(nodes_created);
+    j["nodes_expanded"] = Value(nodes_expanded);
+    j["avg_simulation_time"] = Value(avg_simulation_time);
 
-    // Principal variation
-    oss << "  \"principal_variation\": [";
-    for (size_t i = 0; i < principal_variation.size(); ++i) {
-        const auto& m = principal_variation[i];
-        oss << "[" << m.first.first << "," << m.first.second << "," << m.second.first << "," << m.second.second << "]";
-        if (i + 1 < principal_variation.size()) oss << ",";
-    }
-    oss << "],\n";
+    Array pv;
+    for (const auto& m : principal_variation) pv.emplace_back(Array{Value(m.first.first), Value(m.first.second), Value(m.second.first), Value(m.second.second)});
+    j["principal_variation"] = Value(pv);
 
-    // root node
-    std::function<void(const MCTSNodeSnapshot&, int)> node_json;
-    node_json = [&](const MCTSNodeSnapshot& node, int indent) {
-        std::string ind(indent, ' ');
-        oss << ind << "{\n";
-        oss << ind << "  \"last_move\": [" << node.last_move.first.first << "," << node.last_move.first.second << "," << node.last_move.second.first << "," << node.last_move.second.second << "],\n";
-        oss << ind << "  \"visits\": " << node.visits << ",\n";
-        oss << ind << "  \"wins\": " << node.wins << ",\n";
-        oss << ind << "  \"ucb\": " << node.ucb_value << ",\n";
-        oss << ind << "  \"is_terminal\": " << (node.is_terminal ? "true" : "false") << ",\n";
-        oss << ind << "  \"children\": [\n";
-        for (size_t i = 0; i < node.children.size(); ++i) {
-            node_json(node.children[i], indent + 4);
-            if (i + 1 < node.children.size()) oss << ",\n";
-            else oss << "\n";
-        }
-        oss << ind << "  ]\n";
-        oss << ind << "}";
+    std::function<Value(const MCTSNodeSnapshot&)> node_to_json = [&](const MCTSNodeSnapshot& node) -> Value {
+        Object nj;
+        nj["last_move"] = Value(Array{Value(node.last_move.first.first), Value(node.last_move.first.second), Value(node.last_move.second.first), Value(node.last_move.second.second)});
+        nj["visits"] = Value(node.visits);
+        nj["wins"] = Value(node.wins);
+        nj["ucb"] = Value(node.ucb_value);
+        nj["is_terminal"] = Value(node.is_terminal);
+        nj["prior"] = Value(0.0);
+        nj["virtual_loss"] = Value(0);
+        Array children;
+        for (const auto& c : node.children) children.push_back(node_to_json(c));
+        nj["children"] = Value(children);
+        return Value(nj);
     };
 
-    oss << "  \"root_node\": ";
-    node_json(root_node, 2);
-    oss << "\n}";
-    return oss.str();
+    j["root_node"] = node_to_json(root_node);
+    return Value(j).dump(2);
 }
 
 void MCTSSnapshot::FromString(const std::string& data) {
-    std::istringstream iss(data);
-    std::string line;
-    
-    principal_variation.clear();
-    search_debug_info.clear();
-    
-    while (std::getline(iss, line)) {
-        size_t colon_pos = line.find(':');
-        if (colon_pos == std::string::npos) continue;
-        
-        std::string key = line.substr(0, colon_pos);
-        std::string value = line.substr(colon_pos + 1);
-        
-        if (key == "MCTS_TOTAL_ITERATIONS") {
-            total_iterations = std::stoi(value);
-        } else if (key == "MCTS_COMPLETED_ITERATIONS") {
-            completed_iterations = std::stoi(value);
-        } else if (key == "MCTS_EXPLORATION_CONST") {
-            exploration_constant = std::stod(value);
-        } else if (key == "MCTS_TIME_LIMIT") {
-            time_limit = std::stod(value);
-        } else if (key == "MCTS_ELAPSED_TIME") {
-            elapsed_time = std::stod(value);
-        } else if (key == "MCTS_BEST_EVAL") {
-            best_evaluation = std::stod(value);
-        } else if (key == "MCTS_NODES_CREATED") {
-            nodes_created = std::stoi(value);
-        } else if (key == "MCTS_NODES_EXPANDED") {
-            nodes_expanded = std::stoi(value);
-        } else if (key == "MCTS_AVG_SIM_TIME") {
-            avg_simulation_time = std::stod(value);
-        } else if (key.find("PV_MOVE_") == 0) {
-            // Parse principal variation move
-            std::istringstream move_iss(value);
-            std::string token;
-            std::vector<std::string> tokens;
-            while (std::getline(move_iss, token, ',')) {
-                tokens.push_back(token);
+    try {
+        Value root = ein_json::parse(data);
+        if (root.is_object()) {
+            const auto& obj = root.as_object();
+            if (obj.count("total_iterations")) total_iterations = obj.at("total_iterations").as_int();
+            if (obj.count("completed_iterations")) completed_iterations = obj.at("completed_iterations").as_int();
+            if (obj.count("exploration_constant")) exploration_constant = obj.at("exploration_constant").as_double();
+            if (obj.count("time_limit")) time_limit = obj.at("time_limit").as_double();
+            if (obj.count("elapsed_time")) elapsed_time = obj.at("elapsed_time").as_double();
+            if (obj.count("best_evaluation")) best_evaluation = obj.at("best_evaluation").as_double();
+            if (obj.count("nodes_created")) nodes_created = obj.at("nodes_created").as_int();
+            if (obj.count("nodes_expanded")) nodes_expanded = obj.at("nodes_expanded").as_int();
+            if (obj.count("avg_simulation_time")) avg_simulation_time = obj.at("avg_simulation_time").as_double();
+
+            principal_variation.clear();
+            if (obj.count("principal_variation") && obj.at("principal_variation").is_array()) {
+                for (const auto& item : obj.at("principal_variation").as_array()) {
+                    if (item.is_array()) {
+                        const auto& arr = item.as_array();
+                        if (arr.size() == 4) {
+                            Move m = {{arr[0].as_int(), arr[1].as_int()}, {arr[2].as_int(), arr[3].as_int()}};
+                            principal_variation.push_back(m);
+                        }
+                    }
+                }
             }
-            if (tokens.size() == 4) {
-                Move move = {{std::stoi(tokens[0]), std::stoi(tokens[1])}, 
-                            {std::stoi(tokens[2]), std::stoi(tokens[3])}};
-                principal_variation.push_back(move);
+
+            if (obj.count("root_node")) {
+                std::function<void(const Value&, MCTSNodeSnapshot&)> conv;
+                conv = [&](const Value& nj, MCTSNodeSnapshot& out) {
+                    if (nj.is_object()) {
+                        const auto& nobj = nj.as_object();
+                        if (nobj.count("last_move") && nobj.at("last_move").is_array()) {
+                            const auto& lm = nobj.at("last_move").as_array();
+                            if (lm.size() == 4) out.last_move = {{lm[0].as_int(), lm[1].as_int()}, {lm[2].as_int(), lm[3].as_int()}};
+                        }
+                        if (nobj.count("visits")) out.visits = nobj.at("visits").as_int();
+                        if (nobj.count("wins")) out.wins = nobj.at("wins").as_double();
+                        if (nobj.count("ucb")) out.ucb_value = nobj.at("ucb").as_double();
+                        if (nobj.count("is_terminal")) out.is_terminal = nobj.at("is_terminal").as_int() != 0;
+                        out.children.clear();
+                        if (nobj.count("children") && nobj.at("children").is_array()) {
+                            for (const auto& c : nobj.at("children").as_array()) {
+                                MCTSNodeSnapshot child;
+                                conv(c, child);
+                                out.children.push_back(child);
+                            }
+                        }
+                    }
+                };
+                conv(obj.at("root_node"), root_node);
             }
-        } else if (key.find("MCTS_DEBUG_") == 0) {
-            search_debug_info.push_back(value);
         }
+    } catch (...) {
+        // ignore
     }
 }
 
@@ -271,81 +270,72 @@ std::string AIThinkingSnapshot::ToString() const {
 }
 
 std::string AIThinkingSnapshot::ToJson() const {
-    std::ostringstream oss;
-    oss << "{\n";
-    oss << "  \"mcts_iterations\": " << mcts_iterations << ",\n";
-    oss << "  \"thinking_time\": " << thinking_time << ",\n";
-    oss << "  \"position_evaluation\": " << position_evaluation << ",\n";
-    oss << "  \"nodes_explored\": " << nodes_explored << ",\n";
-    oss << "  \"best_move_reasoning\": \"" << best_move_reasoning << "\",\n";
+    Object j;
+    j["mcts_iterations"] = Value(mcts_iterations);
+    j["thinking_time"] = Value(thinking_time);
+    j["position_evaluation"] = Value(position_evaluation);
+    j["nodes_explored"] = Value(nodes_explored);
+    j["best_move_reasoning"] = Value(best_move_reasoning);
 
-    // move evaluations
-    oss << "  \"move_evaluations\": [";
-    for (size_t i = 0; i < move_evaluations.size(); ++i) {
-        const auto& me = move_evaluations[i];
-        oss << "[" << me.first.first.first << "," << me.first.first.second << "," << me.first.second.first << "," << me.first.second.second << "," << me.second << "]";
-        if (i + 1 < move_evaluations.size()) oss << ",";
+    Array mevals;
+    for (const auto& me : move_evaluations) mevals.emplace_back(Array{Value(me.first.first.first), Value(me.first.first.second), Value(me.first.second.first), Value(me.first.second.second), Value(me.second)});
+    j["move_evaluations"] = Value(mevals);
+    j["debug_info"] = Value(Array());
+    if (!debug_info.empty()) {
+        Array di;
+        for (const auto& s : debug_info) di.emplace_back(Value(s));
+        j["debug_info"] = Value(di);
     }
-    oss << "],\n";
-
-    oss << "  \"debug_info\": [";
-    for (size_t i = 0; i < debug_info.size(); ++i) {
-        oss << "\"" << debug_info[i] << "\"";
-        if (i + 1 < debug_info.size()) oss << ",";
-    }
-    oss << "]";
 
     if (has_mcts_data) {
-        oss << ",\n  \"mcts_state\": ";
-        oss << mcts_state.ToJson();
+        try {
+            Value ms = ein_json::parse(mcts_state.ToJson());
+            j["mcts_state"] = ms;
+        } catch (...) {
+            // omit on failure
+        }
     }
-
-    oss << "\n}";
-    return oss.str();
+    return Value(j).dump(2);
 }
 
 void AIThinkingSnapshot::FromString(const std::string& data) {
-    std::istringstream iss(data);
-    std::string line;
-    
-    move_evaluations.clear();
-    debug_info.clear();
-    
-    while (std::getline(iss, line)) {
-        size_t colon_pos = line.find(':');
-        if (colon_pos == std::string::npos) continue;
-        
-        std::string key = line.substr(0, colon_pos);
-        std::string value = line.substr(colon_pos + 1);
-        
-        if (key == "MCTS_ITERATIONS") {
-            mcts_iterations = std::stoi(value);
-        } else if (key == "THINKING_TIME") {
-            thinking_time = std::stod(value);
-        } else if (key == "POSITION_EVAL") {
-            position_evaluation = std::stod(value);
-        } else if (key == "NODES_EXPLORED") {
-            nodes_explored = std::stoi(value);
-        } else if (key == "BEST_MOVE_REASONING") {
-            best_move_reasoning = value;
-        } else if (key.find("MOVE_EVAL_") == 0) {
-            // Parse move evaluation: x1,y1,x2,y2,eval
-            std::istringstream move_iss(value);
-            std::string token;
-            std::vector<std::string> tokens;
-            while (std::getline(move_iss, token, ',')) {
-                tokens.push_back(token);
+    try {
+        Value root = ein_json::parse(data);
+        if (root.is_object()) {
+            const auto& obj = root.as_object();
+            if (obj.count("mcts_iterations")) mcts_iterations = obj.at("mcts_iterations").as_int();
+            if (obj.count("thinking_time")) thinking_time = obj.at("thinking_time").as_double();
+            if (obj.count("position_evaluation")) position_evaluation = obj.at("position_evaluation").as_double();
+            if (obj.count("nodes_explored")) nodes_explored = obj.at("nodes_explored").as_int();
+            if (obj.count("best_move_reasoning") && obj.at("best_move_reasoning").is_string()) best_move_reasoning = obj.at("best_move_reasoning").as_string();
+
+            move_evaluations.clear();
+            if (obj.count("move_evaluations") && obj.at("move_evaluations").is_array()) {
+                for (const auto& it : obj.at("move_evaluations").as_array()) {
+                    if (it.is_array()) {
+                        const auto& arr = it.as_array();
+                        if (arr.size() == 5) {
+                            Move m = {{arr[0].as_int(), arr[1].as_int()}, {arr[2].as_int(), arr[3].as_int()}};
+                            double ev = arr[4].as_double();
+                            move_evaluations.emplace_back(m, ev);
+                        }
+                    }
+                }
             }
-            if (tokens.size() == 5) {
-                Move move = {{std::stoi(tokens[0]), std::stoi(tokens[1])}, 
-                            {std::stoi(tokens[2]), std::stoi(tokens[3])}};
-                double eval = std::stod(tokens[4]);
-                move_evaluations.emplace_back(move, eval);
+
+            debug_info.clear();
+            if (obj.count("debug_info") && obj.at("debug_info").is_array()) {
+                for (const auto& di : obj.at("debug_info").as_array()) if (di.is_string()) debug_info.push_back(di.as_string());
             }
-        } else if (key.find("DEBUG_") == 0) {
-            debug_info.push_back(value);
+
+            if (obj.count("mcts_state")) {
+                try {
+                    mcts_state.FromString(obj.at("mcts_state").dump());
+                    has_mcts_data = true;
+                } catch (...) { has_mcts_data = false; }
+            }
         }
-    }
+    } catch (...) { }
 }
 
 // GameSnapshot implementation
@@ -360,212 +350,114 @@ GameSnapshot::GameSnapshot() {
 }
 
 std::string GameSnapshot::ToString() const {
-    // Emit full snapshot as JSON for simplicity and external tooling
-    std::ostringstream oss;
-    oss << "{\n";
-    oss << "  \"snapshot_id\": \"" << snapshot_id << "\",\n";
-    oss << "  \"turn_number\": " << turn_number << ",\n";
-    oss << "  \"current_player\": " << static_cast<int>(current_player) << ",\n";
-    oss << "  \"current_dice\": " << current_dice << ",\n";
-    oss << "  \"game_mode\": " << static_cast<int>(game_mode) << ",\n";
-    oss << "  \"game_result\": " << static_cast<int>(game_result) << ",\n";
-    oss << "  \"current_move_index\": " << current_move_index << ",\n";
-    oss << "  \"total_game_time\": " << total_game_time << ",\n";
-    oss << "  \"current_phase\": \"" << current_phase << "\",\n";
+    Object j;
+    j["snapshot_id"] = Value(snapshot_id);
+    j["turn_number"] = Value(turn_number);
+    j["current_player"] = Value(static_cast<int>(current_player));
+    j["current_dice"] = Value(current_dice);
+    j["game_mode"] = Value(static_cast<int>(game_mode));
+    j["game_result"] = Value(static_cast<int>(game_result));
+    j["current_move_index"] = Value(static_cast<int>(current_move_index));
+    j["total_game_time"] = Value(total_game_time);
+    j["current_phase"] = Value(current_phase);
 
-    // Board as 2D array
-    oss << "  \"board\": [\n";
+    // board
+    Array board_arr;
     for (int y = 0; y < BOARD_SIZE; ++y) {
-        oss << "    [";
-        for (int x = 0; x < BOARD_SIZE; ++x) {
-            oss << static_cast<int>(board.GetPiece(x, y));
-            if (x < BOARD_SIZE - 1) oss << ", ";
-        }
-        oss << "]";
-        if (y + 1 < BOARD_SIZE) oss << ",\n";
-        else oss << "\n";
+        Array row;
+        for (int x = 0; x < BOARD_SIZE; ++x) row.emplace_back(Value(static_cast<int>(board.GetPiece(x, y))));
+        board_arr.emplace_back(Value(row));
     }
-    oss << "  ],\n";
+    j["board"] = Value(board_arr);
 
-    // Valid moves
-    oss << "  \"valid_moves\": [";
-    for (size_t i = 0; i < current_valid_moves.size(); ++i) {
-        const auto& m = current_valid_moves[i];
-        oss << "[" << m.first.first << "," << m.first.second << "," << m.second.first << "," << m.second.second << "]";
-        if (i + 1 < current_valid_moves.size()) oss << ", ";
-    }
-    oss << "],\n";
+    // valid moves
+    Array vm;
+    for (const auto& m : current_valid_moves) vm.emplace_back(Array{Value(m.first.first), Value(m.first.second), Value(m.second.first), Value(m.second.second)});
+    j["valid_moves"] = Value(vm);
 
-    // Suggested move
-    oss << "  \"suggested_move\": [" << suggested_move.first.first << "," << suggested_move.first.second << "," << suggested_move.second.first << "," << suggested_move.second.second << "],\n";
+    j["suggested_move"] = Value(Array{Value(suggested_move.first.first), Value(suggested_move.first.second), Value(suggested_move.second.first), Value(suggested_move.second.second)});
 
-    // Move history
-    oss << "  \"move_history\": [";
-    for (size_t i = 0; i < move_history.size(); ++i) {
-        const auto& gm = move_history[i];
-        oss << "[" << gm.move.first.first << "," << gm.move.first.second << "," << gm.move.second.first << "," << gm.move.second.second << "]";
-        if (i + 1 < move_history.size()) oss << ", ";
-    }
-    oss << "],\n";
+    Array mh;
+    for (const auto& gm : move_history) mh.emplace_back(Array{Value(gm.move.first.first), Value(gm.move.first.second), Value(gm.move.second.first), Value(gm.move.second.second)});
+    j["move_history"] = Value(mh);
 
-    // AI thinking as JSON
-    oss << "  \"ai_thinking\": ";
     try {
-        oss << ai_thinking.ToJson() << ",\n";
+        Value at = ein_json::parse(ai_thinking.ToJson());
+        j["ai_thinking"] = at;
     } catch (...) {
-        oss << "null,\n";
+        j["ai_thinking"] = Value();
     }
 
-    // Debug log
-    oss << "  \"debug_log\": [";
-    for (size_t i = 0; i < debug_log.size(); ++i) {
-        oss << "\"" << debug_log[i] << "\"";
-        if (i + 1 < debug_log.size()) oss << ", ";
-    }
-    oss << "]\n";
-
-    oss << "}\n";
-    return oss.str();
+    Array dbg;
+    for (const auto& s : debug_log) dbg.emplace_back(Value(s));
+    j["debug_log"] = Value(dbg);
+    return Value(j).dump(2);
 }
-
 void GameSnapshot::FromString(const std::string& data) {
-    // Minimal JSON parser tailored to the output of ToString()
-    // This is not a full JSON implementation but sufficient for our snapshots.
     try {
-        auto skip_ws = [](const std::string& s, size_t& i) {
-            while (i < s.size() && isspace((unsigned char)s[i])) ++i;
-        };
+        Value root = ein_json::parse(data);
+        if (root.is_object()) {
+            const auto& obj = root.as_object();
+            if (obj.count("snapshot_id") && obj.at("snapshot_id").is_string()) snapshot_id = obj.at("snapshot_id").as_string();
+            if (obj.count("turn_number")) turn_number = obj.at("turn_number").as_int();
+            if (obj.count("current_player")) current_player = static_cast<Player>(obj.at("current_player").as_int());
+            if (obj.count("current_dice")) current_dice = obj.at("current_dice").as_int();
+            if (obj.count("game_mode")) game_mode = static_cast<GameMode>(obj.at("game_mode").as_int());
+            if (obj.count("game_result")) game_result = static_cast<GameResult>(obj.at("game_result").as_int());
+            if (obj.count("current_move_index")) current_move_index = obj.at("current_move_index").as_int();
+            if (obj.count("total_game_time")) total_game_time = obj.at("total_game_time").as_double();
+            if (obj.count("current_phase") && obj.at("current_phase").is_string()) current_phase = obj.at("current_phase").as_string();
 
-        size_t idx = 0;
-        skip_ws(data, idx);
-        if (idx >= data.size() || data[idx] != '{') return;
-        ++idx;
-
-        while (idx < data.size()) {
-            skip_ws(data, idx);
-            if (idx < data.size() && data[idx] == '}') break;
-            // Read key
-            if (data[idx] != '"') break;
-            ++idx;
-            size_t key_start = idx;
-            while (idx < data.size() && data[idx] != '"') ++idx;
-            std::string key = data.substr(key_start, idx - key_start);
-            ++idx; // skip '"'
-            skip_ws(data, idx);
-            if (idx >= data.size() || data[idx] != ':') break;
-            ++idx; // skip ':'
-            skip_ws(data, idx);
-
-            // Parse recognized keys
-            if (key == "snapshot_id") {
-                // string
-                if (data[idx] == '"') {
-                    ++idx; size_t vstart = idx;
-                    while (idx < data.size() && data[idx] != '"') ++idx;
-                    snapshot_id = data.substr(vstart, idx - vstart);
-                    ++idx;
-                }
-            } else if (key == "turn_number") {
-                // number
-                size_t vstart = idx;
-                while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
-                turn_number = std::stoi(data.substr(vstart, idx - vstart));
-            } else if (key == "current_player") {
-                size_t vstart = idx;
-                while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
-                current_player = static_cast<Player>(std::stoi(data.substr(vstart, idx - vstart)));
-            } else if (key == "current_dice") {
-                size_t vstart = idx; while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
-                current_dice = std::stoi(data.substr(vstart, idx - vstart));
-            } else if (key == "game_mode") {
-                size_t vstart = idx; while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
-                game_mode = static_cast<GameMode>(std::stoi(data.substr(vstart, idx - vstart)));
-            } else if (key == "game_result") {
-                size_t vstart = idx; while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
-                game_result = static_cast<GameResult>(std::stoi(data.substr(vstart, idx - vstart)));
-            } else if (key == "current_move_index") {
-                size_t vstart = idx; while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
-                current_move_index = std::stoul(data.substr(vstart, idx - vstart));
-            } else if (key == "board") {
-                // array of arrays
-                // find first '['
-                while (idx < data.size() && data[idx] != '[') ++idx;
-                if (idx >= data.size()) break;
-                ++idx; // skip '['
-                for (int y = 0; y < BOARD_SIZE; ++y) {
-                    // find next '['
-                    while (idx < data.size() && data[idx] != '[') ++idx;
-                    if (idx >= data.size()) break;
-                    ++idx; // skip '['
-                    for (int x = 0; x < BOARD_SIZE; ++x) {
-                        // read integer
-                        while (idx < data.size() && isspace((unsigned char)data[idx])) ++idx;
-                        size_t vstart = idx;
-                        bool neg = false;
-                        if (data[idx] == '-') { neg = true; ++idx; }
-                        while (idx < data.size() && isdigit((unsigned char)data[idx])) ++idx;
-                        int val = std::stoi(data.substr(vstart, idx - vstart));
-                        board.SetPiece(x, y, static_cast<int8_t>(val));
-                        // skip comma or closing
-                        while (idx < data.size() && data[idx] != ',' && data[idx] != ']') ++idx;
-                        if (data[idx] == ',') ++idx;
+            if (obj.count("board") && obj.at("board").is_array()) {
+                const auto& barr = obj.at("board").as_array();
+                for (int y = 0; y < BOARD_SIZE && y < (int)barr.size(); ++y) {
+                    if (!barr[y].is_array()) continue;
+                    const auto& row = barr[y].as_array();
+                    for (int x = 0; x < BOARD_SIZE && x < (int)row.size(); ++x) {
+                        if (row[x].is_number()) board.SetPiece(x, y, static_cast<int8_t>(row[x].as_int()));
                     }
-                    // skip to next
-                    while (idx < data.size() && data[idx] != ']') ++idx;
-                    if (idx < data.size() && data[idx] == ']') ++idx;
                 }
-            } else if (key == "valid_moves") {
-                // parse small array of [x1,y1,x2,y2]
-                while (idx < data.size() && data[idx] != '[') ++idx;
-                if (idx >= data.size()) break;
-                ++idx; // skip '['
-                current_valid_moves.clear();
-                while (idx < data.size() && data[idx] != ']') {
-                    while (idx < data.size() && data[idx] != '[' && data[idx] != ']') ++idx;
-                    if (data[idx] == ']') break;
-                    ++idx; // skip '['
-                    int vals[4] = {0,0,0,0};
-                    for (int k = 0; k < 4; ++k) {
-                        while (idx < data.size() && (isspace((unsigned char)data[idx]) || data[idx]==',')) ++idx;
-                        size_t vstart = idx;
-                        bool neg = false;
-                        if (data[idx] == '-') { neg = true; ++idx; }
-                        while (idx < data.size() && isdigit((unsigned char)data[idx])) ++idx;
-                        vals[k] = std::stoi(data.substr(vstart, idx - vstart));
-                        while (idx < data.size() && data[idx] != ',' && data[idx] != ']') ++idx;
-                        if (data[idx] == ',') ++idx;
-                    }
-                    current_valid_moves.push_back({{vals[0], vals[1]}, {vals[2], vals[3]}});
-                    // skip closing ']'
-                    while (idx < data.size() && data[idx] != ']') ++idx;
-                    if (idx < data.size() && data[idx] == ']') ++idx;
-                }
-            } else if (key == "ai_thinking") {
-                // find '{' start of object
-                while (idx < data.size() && data[idx] != '{') ++idx;
-                if (idx >= data.size()) break;
-                size_t obj_start = idx;
-                // naive find matching '}' (works for our small objects)
-                int depth = 0;
-                while (idx < data.size()) {
-                    if (data[idx] == '{') ++depth;
-                    else if (data[idx] == '}') { --depth; if (depth == 0) { ++idx; break; } }
-                    ++idx;
-                }
-                size_t obj_end = idx;
-                std::string obj = data.substr(obj_start, obj_end - obj_start);
-                ai_thinking.FromString(obj);
-            } else {
-                // Skip unknown value: read until next comma or closing brace
-                while (idx < data.size() && data[idx] != ',' && data[idx] != '}') ++idx;
             }
 
-            // skip separators
-            while (idx < data.size() && (data[idx] == ',' || isspace((unsigned char)data[idx]) || data[idx] == '\n')) ++idx;
+            current_valid_moves.clear();
+            if (obj.count("valid_moves") && obj.at("valid_moves").is_array()) {
+                for (const auto& it : obj.at("valid_moves").as_array()) {
+                    if (it.is_array()) {
+                        const auto& arr = it.as_array();
+                        if (arr.size() == 4) current_valid_moves.push_back({{arr[0].as_int(), arr[1].as_int()}, {arr[2].as_int(), arr[3].as_int()}});
+                    }
+                }
+            }
+
+            if (obj.count("suggested_move") && obj.at("suggested_move").is_array()) {
+                const auto& sm = obj.at("suggested_move").as_array();
+                if (sm.size() == 4) suggested_move = {{sm[0].as_int(), sm[1].as_int()}, {sm[2].as_int(), sm[3].as_int()}};
+            }
+
+            move_history.clear();
+            if (obj.count("move_history") && obj.at("move_history").is_array()) {
+                for (const auto& it : obj.at("move_history").as_array()) {
+                    if (it.is_array()) {
+                        const auto& arr = it.as_array();
+                        if (arr.size() == 4) {
+                            Move mv = {{arr[0].as_int(), arr[1].as_int()}, {arr[2].as_int(), arr[3].as_int()}};
+                            GameMove gm(mv, Player::LEFT_TOP, 0);
+                            move_history.push_back(gm);
+                        }
+                    }
+                }
+            }
+
+            if (obj.count("ai_thinking")) {
+                try { ai_thinking.FromString(obj.at("ai_thinking").dump()); } catch (...) { }
+            }
+
+            debug_log.clear();
+            if (obj.count("debug_log") && obj.at("debug_log").is_array()) {
+                for (const auto& it : obj.at("debug_log").as_array()) if (it.is_string()) debug_log.push_back(it.as_string());
+            }
         }
-    } catch (...) {
-        // If parse fails, leave snapshot in a best-effort state
-    }
+    } catch (...) { }
 }
 
 bool GameSnapshot::SaveToFile(const std::string& filename) const {
