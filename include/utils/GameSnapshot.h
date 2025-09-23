@@ -37,6 +37,7 @@ struct MCTSNodeSnapshot {
     
     std::string ToString() const;
     void FromString(const std::string& data);
+    std::string ToJson() const;
 };
 
 struct MCTSSnapshot {
@@ -64,6 +65,7 @@ struct MCTSSnapshot {
     
     std::string ToString() const;
     void FromString(const std::string& data);
+    std::string ToJson() const;
     
     // Analysis methods
     std::vector<Move> GetBestMoves(int count = 5) const;
@@ -91,6 +93,7 @@ struct AIThinkingSnapshot {
     
     std::string ToString() const;
     void FromString(const std::string& data);
+    std::string ToJson() const;
 };
 
 struct GameSnapshot {
@@ -144,7 +147,7 @@ public:
     SnapshotManager();
     
     // Snapshot operations
-    std::string CreateSnapshot(const GameState& game_state, const std::string& phase = "");
+    std::string CreateSnapshot(const GameState& game_state, const std::string& phase = "", const AIThinkingSnapshot* ai_thinking = nullptr);
     bool LoadSnapshot(const std::string& snapshot_id, GameState& game_state);
     bool SaveSnapshot(const std::string& snapshot_id, const GameSnapshot& snapshot);
     
@@ -229,6 +232,7 @@ private:
     // MCTS integration
     std::shared_ptr<MCTS> mcts_instance_;
     MCTSSnapshot stored_mcts_snapshot_;
+    AIThinkingSnapshot last_ai_thinking_;
     
     // Game state tracking
     GameState current_game_state_;

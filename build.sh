@@ -127,8 +127,33 @@ fi
 
 # Install Python dependencies
 print_status "Installing Python dependencies..."
-pip install --upgrade pip
-pip install -r requirements.txt
+# Prefer pip from virtual environment if available
+PIP_CMD=""
+if [ -d "venv" ]; then
+    if [ "$OS" = "windows" ]; then
+        if [ -x "venv/Scripts/pip" ]; then
+            PIP_CMD="venv/Scripts/pip"
+        fi
+    else
+        if [ -x "venv/bin/pip" ]; then
+            PIP_CMD="venv/bin/pip"
+        fi
+    fi
+fi
+if [ -z "$PIP_CMD" ]; then
+    # Fallback to python -m pip to ensure we use the selected Python interpreter
+    PIP_CMD="$PYTHON_CMD -m pip"
+fi
+
+# If 'uv' tool exists, prefer using it to manage virtual env packages
+if command -v uv &> /dev/null; then
+    print_status "Detected 'uv' tool; using 'uv add' to install Python packages"
+    # Use uv to add packages from requirements file
+    uv add -r requirements.txt
+else
+    "$PIP_CMD" install --upgrade pip
+    "$PIP_CMD" install -r requirements.txt
+fi
 
 # Create build directory
 print_status "Creating build directory..."

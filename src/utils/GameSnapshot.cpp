@@ -104,6 +104,55 @@ std::string MCTSSnapshot::ToString() const {
     return oss.str();
 }
 
+// Simple JSON serialization for MCTSSnapshot (no external deps)
+std::string MCTSSnapshot::ToJson() const {
+    std::ostringstream oss;
+    oss << "{\n";
+    oss << "  \"total_iterations\": " << total_iterations << ",\n";
+    oss << "  \"completed_iterations\": " << completed_iterations << ",\n";
+    oss << "  \"exploration_constant\": " << exploration_constant << ",\n";
+    oss << "  \"time_limit\": " << time_limit << ",\n";
+    oss << "  \"elapsed_time\": " << elapsed_time << ",\n";
+    oss << "  \"best_evaluation\": " << best_evaluation << ",\n";
+    oss << "  \"nodes_created\": " << nodes_created << ",\n";
+    oss << "  \"nodes_expanded\": " << nodes_expanded << ",\n";
+    oss << "  \"avg_simulation_time\": " << avg_simulation_time << ",\n";
+
+    // Principal variation
+    oss << "  \"principal_variation\": [";
+    for (size_t i = 0; i < principal_variation.size(); ++i) {
+        const auto& m = principal_variation[i];
+        oss << "[" << m.first.first << "," << m.first.second << "," << m.second.first << "," << m.second.second << "]";
+        if (i + 1 < principal_variation.size()) oss << ",";
+    }
+    oss << "],\n";
+
+    // root node
+    std::function<void(const MCTSNodeSnapshot&, int)> node_json;
+    node_json = [&](const MCTSNodeSnapshot& node, int indent) {
+        std::string ind(indent, ' ');
+        oss << ind << "{\n";
+        oss << ind << "  \"last_move\": [" << node.last_move.first.first << "," << node.last_move.first.second << "," << node.last_move.second.first << "," << node.last_move.second.second << "],\n";
+        oss << ind << "  \"visits\": " << node.visits << ",\n";
+        oss << ind << "  \"wins\": " << node.wins << ",\n";
+        oss << ind << "  \"ucb\": " << node.ucb_value << ",\n";
+        oss << ind << "  \"is_terminal\": " << (node.is_terminal ? "true" : "false") << ",\n";
+        oss << ind << "  \"children\": [\n";
+        for (size_t i = 0; i < node.children.size(); ++i) {
+            node_json(node.children[i], indent + 4);
+            if (i + 1 < node.children.size()) oss << ",\n";
+            else oss << "\n";
+        }
+        oss << ind << "  ]\n";
+        oss << ind << "}";
+    };
+
+    oss << "  \"root_node\": ";
+    node_json(root_node, 2);
+    oss << "\n}";
+    return oss.str();
+}
+
 void MCTSSnapshot::FromString(const std::string& data) {
     std::istringstream iss(data);
     std::string line;
@@ -194,7 +243,64 @@ std::string AIThinkingSnapshot::ToString() const {
     for (size_t i = 0; i < debug_info.size(); ++i) {
         oss << "DEBUG_" << i << ":" << debug_info[i] << "\n";
     }
+    // Minimal MCTS tree (top 3 children depth 2) flattened
+    if (has_mcts_data) {
+        oss << "MCTS_TREE_ENABLED:1\n";
+        // Root summary
+        oss << "MCTS_ROOT_VISITS:" << mcts_state.root_node.visits << "\n";
+        oss << "MCTS_ROOT_CHILDREN:" << mcts_state.root_node.children.size() << "\n";
+        // Serialize first-level children limited to 3 already
+        for (size_t i = 0; i < mcts_state.root_node.children.size(); ++i) {
+            const auto& c = mcts_state.root_node.children[i];
+            oss << "MCTS_C1_" << i << ":" << c.last_move.first.first << "," << c.last_move.first.second
+                << "," << c.last_move.second.first << "," << c.last_move.second.second
+                << "," << c.visits << "," << c.wins << "," << c.ucb_value << "\n";
+            // Second level for each child
+            for (size_t j = 0; j < c.children.size(); ++j) {
+                const auto& gc = c.children[j];
+                oss << "MCTS_C2_" << i << "_" << j << ":" << gc.last_move.first.first << "," << gc.last_move.first.second
+                    << "," << gc.last_move.second.first << "," << gc.last_move.second.second
+                    << "," << gc.visits << "," << gc.wins << "," << gc.ucb_value << "\n";
+            }
+        }
+    } else {
+        oss << "MCTS_TREE_ENABLED:0\n";
+    }
     
+    return oss.str();
+}
+
+std::string AIThinkingSnapshot::ToJson() const {
+    std::ostringstream oss;
+    oss << "{\n";
+    oss << "  \"mcts_iterations\": " << mcts_iterations << ",\n";
+    oss << "  \"thinking_time\": " << thinking_time << ",\n";
+    oss << "  \"position_evaluation\": " << position_evaluation << ",\n";
+    oss << "  \"nodes_explored\": " << nodes_explored << ",\n";
+    oss << "  \"best_move_reasoning\": \"" << best_move_reasoning << "\",\n";
+
+    // move evaluations
+    oss << "  \"move_evaluations\": [";
+    for (size_t i = 0; i < move_evaluations.size(); ++i) {
+        const auto& me = move_evaluations[i];
+        oss << "[" << me.first.first.first << "," << me.first.first.second << "," << me.first.second.first << "," << me.first.second.second << "," << me.second << "]";
+        if (i + 1 < move_evaluations.size()) oss << ",";
+    }
+    oss << "],\n";
+
+    oss << "  \"debug_info\": [";
+    for (size_t i = 0; i < debug_info.size(); ++i) {
+        oss << "\"" << debug_info[i] << "\"";
+        if (i + 1 < debug_info.size()) oss << ",";
+    }
+    oss << "]";
+
+    if (has_mcts_data) {
+        oss << ",\n  \"mcts_state\": ";
+        oss << mcts_state.ToJson();
+    }
+
+    oss << "\n}";
     return oss.str();
 }
 
@@ -254,152 +360,211 @@ GameSnapshot::GameSnapshot() {
 }
 
 std::string GameSnapshot::ToString() const {
+    // Emit full snapshot as JSON for simplicity and external tooling
     std::ostringstream oss;
-    
-    // Basic game state
-    oss << "SNAPSHOT_ID:" << snapshot_id << "\n";
-    oss << "TURN_NUMBER:" << turn_number << "\n";
-    oss << "CURRENT_PLAYER:" << static_cast<int>(current_player) << "\n";
-    oss << "CURRENT_DICE:" << current_dice << "\n";
-    oss << "GAME_MODE:" << static_cast<int>(game_mode) << "\n";
-    oss << "GAME_RESULT:" << static_cast<int>(game_result) << "\n";
-    oss << "CURRENT_MOVE_INDEX:" << current_move_index << "\n";
-    oss << "TOTAL_GAME_TIME:" << total_game_time << "\n";
-    oss << "CURRENT_PHASE:" << current_phase << "\n";
-    
-    // Board state
-    oss << "BOARD_STATE:\n";
+    oss << "{\n";
+    oss << "  \"snapshot_id\": \"" << snapshot_id << "\",\n";
+    oss << "  \"turn_number\": " << turn_number << ",\n";
+    oss << "  \"current_player\": " << static_cast<int>(current_player) << ",\n";
+    oss << "  \"current_dice\": " << current_dice << ",\n";
+    oss << "  \"game_mode\": " << static_cast<int>(game_mode) << ",\n";
+    oss << "  \"game_result\": " << static_cast<int>(game_result) << ",\n";
+    oss << "  \"current_move_index\": " << current_move_index << ",\n";
+    oss << "  \"total_game_time\": " << total_game_time << ",\n";
+    oss << "  \"current_phase\": \"" << current_phase << "\",\n";
+
+    // Board as 2D array
+    oss << "  \"board\": [\n";
     for (int y = 0; y < BOARD_SIZE; ++y) {
+        oss << "    [";
         for (int x = 0; x < BOARD_SIZE; ++x) {
             oss << static_cast<int>(board.GetPiece(x, y));
-            if (x < BOARD_SIZE - 1) oss << ",";
+            if (x < BOARD_SIZE - 1) oss << ", ";
         }
-        oss << "\n";
+        oss << "]";
+        if (y + 1 < BOARD_SIZE) oss << ",\n";
+        else oss << "\n";
     }
-    
-    // Current valid moves
-    oss << "VALID_MOVES_COUNT:" << current_valid_moves.size() << "\n";
+    oss << "  ],\n";
+
+    // Valid moves
+    oss << "  \"valid_moves\": [";
     for (size_t i = 0; i < current_valid_moves.size(); ++i) {
-        const auto& move = current_valid_moves[i];
-        oss << "VALID_MOVE_" << i << ":" << move.first.first << "," << move.first.second 
-            << "," << move.second.first << "," << move.second.second << "\n";
+        const auto& m = current_valid_moves[i];
+        oss << "[" << m.first.first << "," << m.first.second << "," << m.second.first << "," << m.second.second << "]";
+        if (i + 1 < current_valid_moves.size()) oss << ", ";
     }
-    
+    oss << "],\n";
+
     // Suggested move
-    oss << "SUGGESTED_MOVE:" << suggested_move.first.first << "," << suggested_move.first.second 
-        << "," << suggested_move.second.first << "," << suggested_move.second.second << "\n";
-    
-    // AI thinking data
-    oss << "AI_THINKING:\n" << ai_thinking.ToString() << "\n";
-    
-    // Move history count
-    oss << "MOVE_HISTORY_COUNT:" << move_history.size() << "\n";
-    
-    // Debug log
-    oss << "DEBUG_LOG_COUNT:" << debug_log.size() << "\n";
-    for (size_t i = 0; i < debug_log.size(); ++i) {
-        oss << "DEBUG_LOG_" << i << ":" << debug_log[i] << "\n";
+    oss << "  \"suggested_move\": [" << suggested_move.first.first << "," << suggested_move.first.second << "," << suggested_move.second.first << "," << suggested_move.second.second << "],\n";
+
+    // Move history
+    oss << "  \"move_history\": [";
+    for (size_t i = 0; i < move_history.size(); ++i) {
+        const auto& gm = move_history[i];
+        oss << "[" << gm.move.first.first << "," << gm.move.first.second << "," << gm.move.second.first << "," << gm.move.second.second << "]";
+        if (i + 1 < move_history.size()) oss << ", ";
     }
-    
+    oss << "],\n";
+
+    // AI thinking as JSON
+    oss << "  \"ai_thinking\": ";
+    try {
+        oss << ai_thinking.ToJson() << ",\n";
+    } catch (...) {
+        oss << "null,\n";
+    }
+
+    // Debug log
+    oss << "  \"debug_log\": [";
+    for (size_t i = 0; i < debug_log.size(); ++i) {
+        oss << "\"" << debug_log[i] << "\"";
+        if (i + 1 < debug_log.size()) oss << ", ";
+    }
+    oss << "]\n";
+
+    oss << "}\n";
     return oss.str();
 }
 
 void GameSnapshot::FromString(const std::string& data) {
-    std::istringstream iss(data);
-    std::string line;
-    
-    current_valid_moves.clear();
-    debug_log.clear();
-    
-    bool reading_board = false;
-    bool reading_ai_thinking = false;
-    int board_row = 0;
-    std::string ai_thinking_data;
-    
-    while (std::getline(iss, line)) {
-        if (line == "BOARD_STATE:") {
-            reading_board = true;
-            board_row = 0;
-            continue;
-        } else if (line == "AI_THINKING:") {
-            reading_ai_thinking = true;
-            continue;
-        } else if (reading_ai_thinking && !line.empty()) {
-            ai_thinking_data += line + "\n";
-            continue;
-        } else if (reading_board && board_row < BOARD_SIZE) {
-            // Parse board row
-            std::istringstream row_iss(line);
-            std::string cell;
-            int col = 0;
-            while (std::getline(row_iss, cell, ',') && col < BOARD_SIZE) {
-                board.SetPiece(col, board_row, static_cast<int8_t>(std::stoi(cell)));
-                col++;
+    // Minimal JSON parser tailored to the output of ToString()
+    // This is not a full JSON implementation but sufficient for our snapshots.
+    try {
+        auto skip_ws = [](const std::string& s, size_t& i) {
+            while (i < s.size() && isspace((unsigned char)s[i])) ++i;
+        };
+
+        size_t idx = 0;
+        skip_ws(data, idx);
+        if (idx >= data.size() || data[idx] != '{') return;
+        ++idx;
+
+        while (idx < data.size()) {
+            skip_ws(data, idx);
+            if (idx < data.size() && data[idx] == '}') break;
+            // Read key
+            if (data[idx] != '"') break;
+            ++idx;
+            size_t key_start = idx;
+            while (idx < data.size() && data[idx] != '"') ++idx;
+            std::string key = data.substr(key_start, idx - key_start);
+            ++idx; // skip '"'
+            skip_ws(data, idx);
+            if (idx >= data.size() || data[idx] != ':') break;
+            ++idx; // skip ':'
+            skip_ws(data, idx);
+
+            // Parse recognized keys
+            if (key == "snapshot_id") {
+                // string
+                if (data[idx] == '"') {
+                    ++idx; size_t vstart = idx;
+                    while (idx < data.size() && data[idx] != '"') ++idx;
+                    snapshot_id = data.substr(vstart, idx - vstart);
+                    ++idx;
+                }
+            } else if (key == "turn_number") {
+                // number
+                size_t vstart = idx;
+                while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
+                turn_number = std::stoi(data.substr(vstart, idx - vstart));
+            } else if (key == "current_player") {
+                size_t vstart = idx;
+                while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
+                current_player = static_cast<Player>(std::stoi(data.substr(vstart, idx - vstart)));
+            } else if (key == "current_dice") {
+                size_t vstart = idx; while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
+                current_dice = std::stoi(data.substr(vstart, idx - vstart));
+            } else if (key == "game_mode") {
+                size_t vstart = idx; while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
+                game_mode = static_cast<GameMode>(std::stoi(data.substr(vstart, idx - vstart)));
+            } else if (key == "game_result") {
+                size_t vstart = idx; while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
+                game_result = static_cast<GameResult>(std::stoi(data.substr(vstart, idx - vstart)));
+            } else if (key == "current_move_index") {
+                size_t vstart = idx; while (idx < data.size() && (isdigit((unsigned char)data[idx]) || data[idx]=='-' )) ++idx;
+                current_move_index = std::stoul(data.substr(vstart, idx - vstart));
+            } else if (key == "board") {
+                // array of arrays
+                // find first '['
+                while (idx < data.size() && data[idx] != '[') ++idx;
+                if (idx >= data.size()) break;
+                ++idx; // skip '['
+                for (int y = 0; y < BOARD_SIZE; ++y) {
+                    // find next '['
+                    while (idx < data.size() && data[idx] != '[') ++idx;
+                    if (idx >= data.size()) break;
+                    ++idx; // skip '['
+                    for (int x = 0; x < BOARD_SIZE; ++x) {
+                        // read integer
+                        while (idx < data.size() && isspace((unsigned char)data[idx])) ++idx;
+                        size_t vstart = idx;
+                        bool neg = false;
+                        if (data[idx] == '-') { neg = true; ++idx; }
+                        while (idx < data.size() && isdigit((unsigned char)data[idx])) ++idx;
+                        int val = std::stoi(data.substr(vstart, idx - vstart));
+                        board.SetPiece(x, y, static_cast<int8_t>(val));
+                        // skip comma or closing
+                        while (idx < data.size() && data[idx] != ',' && data[idx] != ']') ++idx;
+                        if (data[idx] == ',') ++idx;
+                    }
+                    // skip to next
+                    while (idx < data.size() && data[idx] != ']') ++idx;
+                    if (idx < data.size() && data[idx] == ']') ++idx;
+                }
+            } else if (key == "valid_moves") {
+                // parse small array of [x1,y1,x2,y2]
+                while (idx < data.size() && data[idx] != '[') ++idx;
+                if (idx >= data.size()) break;
+                ++idx; // skip '['
+                current_valid_moves.clear();
+                while (idx < data.size() && data[idx] != ']') {
+                    while (idx < data.size() && data[idx] != '[' && data[idx] != ']') ++idx;
+                    if (data[idx] == ']') break;
+                    ++idx; // skip '['
+                    int vals[4] = {0,0,0,0};
+                    for (int k = 0; k < 4; ++k) {
+                        while (idx < data.size() && (isspace((unsigned char)data[idx]) || data[idx]==',')) ++idx;
+                        size_t vstart = idx;
+                        bool neg = false;
+                        if (data[idx] == '-') { neg = true; ++idx; }
+                        while (idx < data.size() && isdigit((unsigned char)data[idx])) ++idx;
+                        vals[k] = std::stoi(data.substr(vstart, idx - vstart));
+                        while (idx < data.size() && data[idx] != ',' && data[idx] != ']') ++idx;
+                        if (data[idx] == ',') ++idx;
+                    }
+                    current_valid_moves.push_back({{vals[0], vals[1]}, {vals[2], vals[3]}});
+                    // skip closing ']'
+                    while (idx < data.size() && data[idx] != ']') ++idx;
+                    if (idx < data.size() && data[idx] == ']') ++idx;
+                }
+            } else if (key == "ai_thinking") {
+                // find '{' start of object
+                while (idx < data.size() && data[idx] != '{') ++idx;
+                if (idx >= data.size()) break;
+                size_t obj_start = idx;
+                // naive find matching '}' (works for our small objects)
+                int depth = 0;
+                while (idx < data.size()) {
+                    if (data[idx] == '{') ++depth;
+                    else if (data[idx] == '}') { --depth; if (depth == 0) { ++idx; break; } }
+                    ++idx;
+                }
+                size_t obj_end = idx;
+                std::string obj = data.substr(obj_start, obj_end - obj_start);
+                ai_thinking.FromString(obj);
+            } else {
+                // Skip unknown value: read until next comma or closing brace
+                while (idx < data.size() && data[idx] != ',' && data[idx] != '}') ++idx;
             }
-            board_row++;
-            if (board_row >= BOARD_SIZE) {
-                reading_board = false;
-            }
-            continue;
+
+            // skip separators
+            while (idx < data.size() && (data[idx] == ',' || isspace((unsigned char)data[idx]) || data[idx] == '\n')) ++idx;
         }
-        
-        reading_ai_thinking = false;
-        
-        size_t colon_pos = line.find(':');
-        if (colon_pos == std::string::npos) continue;
-        
-        std::string key = line.substr(0, colon_pos);
-        std::string value = line.substr(colon_pos + 1);
-        
-        if (key == "SNAPSHOT_ID") {
-            snapshot_id = value;
-        } else if (key == "TURN_NUMBER") {
-            turn_number = std::stoi(value);
-        } else if (key == "CURRENT_PLAYER") {
-            current_player = static_cast<Player>(std::stoi(value));
-        } else if (key == "CURRENT_DICE") {
-            current_dice = std::stoi(value);
-        } else if (key == "GAME_MODE") {
-            game_mode = static_cast<GameMode>(std::stoi(value));
-        } else if (key == "GAME_RESULT") {
-            game_result = static_cast<GameResult>(std::stoi(value));
-        } else if (key == "CURRENT_MOVE_INDEX") {
-            current_move_index = std::stoi(value);
-        } else if (key == "TOTAL_GAME_TIME") {
-            total_game_time = std::stod(value);
-        } else if (key == "CURRENT_PHASE") {
-            current_phase = value;
-        } else if (key.find("VALID_MOVE_") == 0) {
-            // Parse valid move: x1,y1,x2,y2
-            std::istringstream move_iss(value);
-            std::string token;
-            std::vector<std::string> tokens;
-            while (std::getline(move_iss, token, ',')) {
-                tokens.push_back(token);
-            }
-            if (tokens.size() == 4) {
-                Move move = {{std::stoi(tokens[0]), std::stoi(tokens[1])}, 
-                            {std::stoi(tokens[2]), std::stoi(tokens[3])}};
-                current_valid_moves.push_back(move);
-            }
-        } else if (key == "SUGGESTED_MOVE") {
-            std::istringstream move_iss(value);
-            std::string token;
-            std::vector<std::string> tokens;
-            while (std::getline(move_iss, token, ',')) {
-                tokens.push_back(token);
-            }
-            if (tokens.size() == 4) {
-                suggested_move = {{std::stoi(tokens[0]), std::stoi(tokens[1])}, 
-                                 {std::stoi(tokens[2]), std::stoi(tokens[3])}};
-            }
-        } else if (key.find("DEBUG_LOG_") == 0) {
-            debug_log.push_back(value);
-        }
-    }
-    
-    if (!ai_thinking_data.empty()) {
-        ai_thinking.FromString(ai_thinking_data);
+    } catch (...) {
+        // If parse fails, leave snapshot in a best-effort state
     }
 }
 
@@ -457,28 +622,47 @@ SnapshotManager::SnapshotManager()
     EnsureSnapshotsDirectory();
 }
 
-std::string SnapshotManager::CreateSnapshot(const GameState& game_state, const std::string& phase) {
+std::string SnapshotManager::CreateSnapshot(const GameState& game_state, const std::string& phase, const AIThinkingSnapshot* ai_thinking) {
     GameSnapshot snapshot;
     snapshot.UpdateFromGameState(game_state);
     snapshot.current_phase = phase.empty() ? "auto_save" : phase;
     snapshot.turn_number = ++move_counter_;
-    
+
     std::string snapshot_id = GenerateSnapshotId();
     snapshot.snapshot_id = snapshot_id;
-    
+
+    if (ai_thinking) {
+        snapshot.ai_thinking = *ai_thinking;
+        snapshot.ai_thinking.has_mcts_data = ai_thinking->has_mcts_data;
+    }
+
     if (SaveSnapshot(snapshot_id, snapshot)) {
         latest_snapshot_id_ = snapshot_id;
         return snapshot_id;
     }
-    
+
     return "";
 }
 
-bool SnapshotManager::LoadSnapshot(const std::string& snapshot_id, GameState& /* game_state */) {
+bool SnapshotManager::LoadSnapshot(const std::string& snapshot_id, GameState& game_state) {
     GameSnapshot snapshot;
     if (snapshot.LoadFromFile(GetSnapshotFilename(snapshot_id))) {
-        // Would need to update GameState from snapshot here
-        // This requires GameState to have methods to set its internal state
+        // Populate provided GameState with snapshot contents
+        // This requires GameState to expose setters (added to GameState.h)
+        // Note: We only update core fields here; callbacks are not preserved
+        try {
+            // Apply snapshot fields to the provided GameState using the new setters
+            game_state.SetBoard(snapshot.board);
+            game_state.SetCurrentPlayer(snapshot.current_player);
+            game_state.SetCurrentDice(snapshot.current_dice);
+            game_state.SetGameMode(snapshot.game_mode);
+            game_state.SetGameResult(snapshot.game_result);
+            game_state.SetMoveHistory(snapshot.move_history);
+            game_state.SetCurrentMoveIndex(snapshot.current_move_index);
+            // Note: we intentionally do not reattach callbacks or AI pointers here
+        } catch (...) {
+            // Fallback: do nothing
+        }
         return true;
     }
     return false;
@@ -585,7 +769,7 @@ int SnapshotGameRunner::RunFromSnapshot(const std::string& snapshot_id) {
         // Create new game
         GameState game_state;
         game_state.NewGame(GameMode::AI_VS_AI, true);
-        actual_snapshot_id = snapshot_manager_.CreateSnapshot(game_state, "initial");
+    actual_snapshot_id = snapshot_manager_.CreateSnapshot(game_state, "initial", nullptr);
         
         if (actual_snapshot_id.empty()) {
             LogDebug("Failed to create initial snapshot");
@@ -599,9 +783,12 @@ int SnapshotGameRunner::RunFromSnapshot(const std::string& snapshot_id) {
     GameSnapshot snapshot = snapshot_manager_.GetSnapshot(actual_snapshot_id);
     LogDebug("Loaded snapshot: " + snapshot.GetSnapshotSummary());
     
-    // Create game state from snapshot (simplified for now)
+    // Create game state from snapshot (attempt to load snapshot into game_state)
     GameState game_state;
-    game_state.NewGame(snapshot.game_mode, true);
+    if (!snapshot_manager_.LoadSnapshot(actual_snapshot_id, game_state)) {
+        LogDebug("Failed to load snapshot into game state; initializing new game instead");
+        game_state.NewGame(snapshot.game_mode, true);
+    }
     
     int steps = 0;
     while (steps < max_steps_ && game_state.GetGameResult() == GameResult::ONGOING) {
@@ -615,7 +802,9 @@ int SnapshotGameRunner::RunFromSnapshot(const std::string& snapshot_id) {
         }
         
         // Create snapshot after each step
-        std::string new_snapshot_id = snapshot_manager_.CreateSnapshot(game_state, "step_" + std::to_string(steps));
+        // If we have AI thinking info from last step, include it; otherwise pass nullptr
+        const AIThinkingSnapshot* ai_ptr = last_ai_thinking_.has_mcts_data ? &last_ai_thinking_ : nullptr;
+        std::string new_snapshot_id = snapshot_manager_.CreateSnapshot(game_state, "step_" + std::to_string(steps), ai_ptr);
         if (!new_snapshot_id.empty()) {
             current_snapshot_id_ = new_snapshot_id;
             LogDebug("Created snapshot: " + new_snapshot_id);
@@ -652,9 +841,12 @@ bool SnapshotGameRunner::ExecuteOneStep(GameState& game_state) {
     
     auto valid_moves = game_state.GetBoard().GetValidMoves(current_player, dice);
     if (valid_moves.empty()) {
-        LogDebug("No valid moves available, skipping turn");
-        // Would need GameState::SkipTurn() method
-        return true;
+        LogDebug("No valid moves available for dice=" + std::to_string(dice) + ", performing SkipTurn() to advance state");
+        // Advance turn properly so dice changes and game progresses
+        game_state.SkipTurn();
+        // Clear last AI thinking since no AI ran this turn
+        last_ai_thinking_ = AIThinkingSnapshot();
+        return true; // Not a failure; just a skipped turn
     }
     
     // Get AI move
@@ -670,6 +862,9 @@ bool SnapshotGameRunner::ExecuteOneStep(GameState& game_state) {
              std::to_string(ai_move.first.second) + " -> " + 
              std::to_string(ai_move.second.first) + "," + std::to_string(ai_move.second.second));
     
+    // Save AI thinking for snapshot saving and debugging
+    last_ai_thinking_ = ai_thinking;
+
     // Execute move
     if (game_state.MakeMove(ai_move)) {
         LogDebug("Move executed successfully");
@@ -689,32 +884,79 @@ Move SnapshotGameRunner::GetAIMove(const GameState& game_state, AIThinkingSnapsh
     if (valid_moves.empty()) {
         return {{-1, -1}, {-1, -1}};
     }
-    
-    // Simple AI: random move for now
-    // This would be replaced with actual MCTS implementation
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, valid_moves.size() - 1);
-    
-    Move selected_move = valid_moves[dis(gen)];
-    
-    // Fill AI thinking data
-    ai_thinking.mcts_iterations = mcts_iterations_;
-    ai_thinking.thinking_time = ai_thinking_time_;
-    ai_thinking.best_move_reasoning = "Random selection for demo";
-    ai_thinking.position_evaluation = 0.5; // Neutral
-    ai_thinking.nodes_explored = mcts_iterations_;
-    
-    for (const auto& move : valid_moves) {
-        double eval = 0.4 + (dis(gen) % 20) / 100.0; // Random eval between 0.4-0.6
-        ai_thinking.move_evaluations.emplace_back(move, eval);
+    // Use real MCTS instance
+    AIConfig config;
+    config.mcts_iterations = mcts_iterations_;
+    config.thinking_time = ai_thinking_time_;
+    config.enable_multithreading = true;
+    config.thread_count = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) / 2);
+
+    MCTS mcts(config);
+    mcts.EnableTreePersistence(true);
+
+    auto start = std::chrono::steady_clock::now();
+    Move best_move = mcts.FindBestMove(board, player, dice);
+    auto end = std::chrono::steady_clock::now();
+
+    ai_thinking.mcts_iterations = mcts.GetIterationsPerformed();
+    ai_thinking.thinking_time = std::chrono::duration<double>(end - start).count();
+    ai_thinking.nodes_explored = ai_thinking.mcts_iterations; // approximate
+    ai_thinking.position_evaluation = mcts.EvaluatePosition(board, player);
+    ai_thinking.best_move_reasoning = "MCTS selection";
+
+    // Export trimmed tree (depth 2, top 3 children)
+    auto export_root = mcts.ExportSearchTree(2, 3);
+    // Populate MCTSSnapshot root node
+    MCTSSnapshot snapshot;
+    snapshot.total_iterations = ai_thinking.mcts_iterations;
+    snapshot.time_limit = config.thinking_time;
+    snapshot.elapsed_time = ai_thinking.thinking_time;
+    snapshot.best_evaluation = ai_thinking.position_evaluation;
+    snapshot.nodes_created = 0;
+
+    // Convert export_root into MCTSNodeSnapshot structure
+    MCTSNodeSnapshot root_node;
+    root_node.position = {-1, -1};
+    root_node.player = player;
+    root_node.dice_value = dice;
+    root_node.last_move = export_root.move;
+    root_node.visits = export_root.visits;
+    root_node.wins = export_root.win_rate;
+    root_node.ucb_value = export_root.ucb;
+    root_node.is_fully_expanded = export_root.terminal;
+    root_node.is_terminal = export_root.terminal;
+
+    // children (top 3) and all their grandchildren
+    for (size_t i = 0; i < export_root.children.size(); ++i) {
+        const auto& c = export_root.children[i];
+        MCTSNodeSnapshot child_node;
+        child_node.last_move = c.move;
+        child_node.visits = c.visits;
+        child_node.wins = c.win_rate;
+        child_node.ucb_value = c.ucb;
+        child_node.is_terminal = c.terminal;
+        // grandchildren
+        for (size_t j = 0; j < c.children.size(); ++j) {
+            const auto& gc = c.children[j];
+            MCTSNodeSnapshot grand;
+            grand.last_move = gc.move;
+            grand.visits = gc.visits;
+            grand.wins = gc.win_rate;
+            grand.ucb_value = gc.ucb;
+            grand.is_terminal = gc.terminal;
+            child_node.children.push_back(grand);
+        }
+        root_node.children.push_back(child_node);
     }
-    
-    ai_thinking.debug_info.push_back("Evaluated " + std::to_string(valid_moves.size()) + " moves");
-    ai_thinking.debug_info.push_back("Selected move with evaluation: " + 
-                                   std::to_string(ai_thinking.move_evaluations.back().second));
-    
-    return selected_move;
+
+    snapshot.root_node = root_node;
+    ai_thinking.mcts_state = snapshot;
+    ai_thinking.has_mcts_data = true;
+
+    if (best_move.first.first == -1) {
+        return valid_moves[0];
+    }
+    return best_move;
 }
 
 void SnapshotGameRunner::RenderGameState(const GameState& game_state) const {
@@ -795,6 +1037,59 @@ MCTSSnapshot SnapshotGameRunner::CaptureMCTSStateForDebug() const {
     snapshot.search_debug_info.push_back("Using " + std::to_string(mcts_iterations_) + " iterations");
     
     return snapshot;
+}
+
+// Export live MCTS state into MCTSSnapshot if an MCTS instance is attached
+bool SnapshotGameRunner::CaptureMCTSState(MCTSSnapshot& mcts_snapshot) const {
+    if (!mcts_instance_) return false;
+    // Export a moderately deep tree for debugging (depth 2, top 5 children)
+    auto export_node = mcts_instance_->ExportSearchTree(2, 5);
+    // Fill snapshot minimally
+    mcts_snapshot.total_iterations = mcts_instance_->GetIterationsPerformed();
+    mcts_snapshot.completed_iterations = mcts_instance_->GetIterationsPerformed();
+    mcts_snapshot.time_limit = ai_thinking_time_;
+    mcts_snapshot.elapsed_time = mcts_instance_->GetLastSearchTime();
+    mcts_snapshot.best_evaluation = 0.0;
+    // Convert export_node recursively into MCTSNodeSnapshot structure
+    std::function<void(const MCTS::ExportNode&, MCTSNodeSnapshot&)> conv;
+    conv = [&](const MCTS::ExportNode& in, MCTSNodeSnapshot& out) {
+        out.last_move = in.move;
+        out.visits = in.visits;
+        out.wins = in.win_rate;
+        out.ucb_value = in.ucb;
+        out.is_terminal = in.terminal;
+        for (const auto& c : in.children) {
+            MCTSNodeSnapshot child;
+            conv(c, child);
+            out.children.push_back(child);
+        }
+    };
+    conv(export_node, mcts_snapshot.root_node);
+    return true;
+}
+
+// Restore an MCTS snapshot into the attached MCTS instance (best-effort)
+bool SnapshotGameRunner::RestoreMCTSState(const MCTSSnapshot& mcts_snapshot) {
+    if (!mcts_instance_) return false;
+    // Convert MCTSSnapshot.root_node into ExportNode for import
+    std::function<MCTS::ExportNode(const MCTSNodeSnapshot&)> conv;
+    conv = [&](const MCTSNodeSnapshot& in) -> MCTS::ExportNode {
+        MCTS::ExportNode out;
+        out.move = in.last_move;
+        out.visits = in.visits;
+        out.win_rate = in.wins;
+        out.ucb = in.ucb_value;
+        out.terminal = in.is_terminal;
+        for (const auto& c : in.children) {
+            out.children.push_back(conv(c));
+        }
+        return out;
+    };
+
+    MCTS::ExportNode root_export = conv(mcts_snapshot.root_node);
+    mcts_instance_->EnableTreePersistence(true);
+    mcts_instance_->ImportSearchTree(root_export);
+    return true;
 }
 
 bool SnapshotGameRunner::RunWithMCTSSnapshots(int max_moves) {

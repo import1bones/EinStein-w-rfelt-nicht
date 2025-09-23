@@ -360,16 +360,38 @@ std::vector<Move> ChessBoard::GetValidMoves(Player player, int dice) const {
         }
     }
     
-    // Generate moves for each movable piece
+    // Generate moves for each movable piece (initial attempt)
     for (int piece_num : movable_pieces) {
         auto piece_pos = FindPiece(piece_num, player);
-        if (piece_pos.has_value()) {
+        if (!piece_pos.has_value()) continue;
+        auto adjacent_positions = GetAdjacentPositions(piece_pos.value());
+        for (const auto& adj_pos : adjacent_positions) {
+            Move test_move{piece_pos.value(), adj_pos};
+            if (IsValidMove(test_move, player)) {
+                valid_moves.push_back(test_move);
+            }
+        }
+    }
+
+    // Fallback: if we found no moves (e.g., dice-matched piece is blocked), try all other pieces
+    if (valid_moves.empty()) {
+        for (int piece_num = 1; piece_num <= NUM_PIECES; ++piece_num) {
+            // Skip the already considered piece if any (movable_pieces may contain one)
+            if (!movable_pieces.empty() && std::find(movable_pieces.begin(), movable_pieces.end(), piece_num) != movable_pieces.end()) {
+                continue;
+            }
+            auto piece_pos = FindPiece(piece_num, player);
+            if (!piece_pos.has_value()) continue;
             auto adjacent_positions = GetAdjacentPositions(piece_pos.value());
             for (const auto& adj_pos : adjacent_positions) {
                 Move test_move{piece_pos.value(), adj_pos};
                 if (IsValidMove(test_move, player)) {
                     valid_moves.push_back(test_move);
                 }
+            }
+            if (!valid_moves.empty()) {
+                // Stop after first piece that yields moves to keep behavior deterministic
+                break;
             }
         }
     }

@@ -24,6 +24,7 @@ struct MCTSNode {
     
     std::weak_ptr<MCTSNode> parent;  // Use weak_ptr to avoid circular reference
     std::vector<std::shared_ptr<MCTSNode>> children;
+    mutable std::mutex children_mutex; // protect children vector & expansion flags
     
     std::atomic<int> visits{0};
     std::atomic<int> wins_int{0};  // Store wins * 1000 to avoid floating point atomics
@@ -47,6 +48,10 @@ class MCTS {
 public:
     explicit MCTS(const AIConfig& config = AIConfig{});
     ~MCTS() = default;
+    // Public constants (needed by node methods for scaling without friendship)
+    static constexpr int WIN_SCALE = 1000;
+    static constexpr int DRAW_SCORE = WIN_SCALE/2;
+    static constexpr int SIMULATION_MAX_PLIES = 200;
     
     // Main MCTS interface
     Move FindBestMove(const ChessBoard& board, Player player, int dice);
@@ -60,8 +65,24 @@ public:
     // Analysis features
     std::vector<std::pair<Move, double>> GetMoveAnalysis(const ChessBoard& board, Player player, int dice);
     double EvaluatePosition(const ChessBoard& board, Player player);
+
+    // Snapshot / tree export (trimmed) - exports a shallow copy of current search tree after FindBestMove
+    // Parameters: max_depth (inclusive, root depth=0), max_children per node (top by visits)
+    struct ExportNode {
+        Move move;
+        int visits = 0;
+        double win_rate = 0.0; // 0..1
+        double ucb = 0.0;
+        bool terminal = false;
+        std::vector<ExportNode> children;
+    };
+    ExportNode ExportSearchTree(int max_depth = 2, int max_children = 3) const; // Returns empty if no root persisted
+    void EnableTreePersistence(bool enable) { persist_last_root_ = enable; }
+    // Import a previously exported tree into the live MCTS instance (for resuming searches)
+    void ImportSearchTree(const ExportNode& root_export);
     
 private:
+
     AIConfig config_;
     std::random_device rd_;
     std::mt19937 gen_;
@@ -71,6 +92,9 @@ private:
     std::atomic<bool> search_cancelled_{false};
     std::atomic<int> iterations_performed_{0};
     double last_search_time_ = 0.0;
+    bool debug_enabled_ = false; // toggled if log level / config indicates
+    bool persist_last_root_ = false;
+    std::shared_ptr<MCTSNode> last_root_; // kept for snapshot export when enabled
     
     // MCTS phases
     std::shared_ptr<MCTSNode> Selection(std::shared_ptr<MCTSNode> root);

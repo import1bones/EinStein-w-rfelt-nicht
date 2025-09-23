@@ -17,7 +17,7 @@ MCTSNode::MCTSNode(const ChessBoard& board_state, Player player, int dice, const
 double MCTSNode::GetWinRate() const {
     int visit_count = visits.load();
     if (visit_count == 0) return 0.0;
-    return static_cast<double>(wins_int.load()) / (visit_count * 1000.0);
+    return static_cast<double>(wins_int.load()) / (visit_count * MCTS::WIN_SCALE);
 }
 
 double MCTSNode::GetUCBValue(double exploration_constant) const {
@@ -51,17 +51,17 @@ std::shared_ptr<MCTSNode> MCTSNode::SelectBestChild(double exploration_constant)
 }
 
 void MCTSNode::Backpropagate(GameResult result, Player winner) {
-    visits.fetch_add(1);
-    
-    std::lock_guard<std::mutex> lock(wins_mutex);
-    if (result == GameResult::DRAW) {
-        wins_int.fetch_add(500);  // 0.5 * 1000 (Draw is worth 0.5 points)
-    } else if ((winner == current_player && result != GameResult::ONGOING) ||
-               (current_player == Player::LEFT_TOP && result == GameResult::LT_WINS) ||
-               (current_player == Player::RIGHT_BOTTOM && result == GameResult::RB_WINS)) {
-        wins_int.fetch_add(1000);  // 1.0 * 1000 (Win for current player)
+    visits.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lock(wins_mutex);
+        if (result == GameResult::DRAW) {
+            wins_int.fetch_add(MCTS::DRAW_SCORE, std::memory_order_relaxed);
+        } else if ((winner == current_player && result != GameResult::ONGOING) ||
+                   (current_player == Player::LEFT_TOP && result == GameResult::LT_WINS) ||
+                   (current_player == Player::RIGHT_BOTTOM && result == GameResult::RB_WINS)) {
+            wins_int.fetch_add(MCTS::WIN_SCALE, std::memory_order_relaxed);
+        }
     }
-    // Loss: no change to wins_int (already 0)
     
     // Recursively propagate up the tree
     auto parent_ptr = parent.lock();
@@ -82,6 +82,10 @@ Move MCTS::FindBestMove(const ChessBoard& board, Player player, int dice) {
     
     // Create root node
     auto root = std::make_shared<MCTSNode>(board, player, dice);
+    if (persist_last_root_) {
+        std::lock_guard<std::mutex> lock(tree_mutex_);
+        last_root_ = root;
+    }
     
     // Calculate end time based on configuration
     auto end_time = start_time + std::chrono::milliseconds(
@@ -91,7 +95,12 @@ Move MCTS::FindBestMove(const ChessBoard& board, Player player, int dice) {
     if (config_.thread_count > 1 && config_.enable_multithreading) {
         ParallelSearch(root, end_time);
     } else {
-        RunIterations(root, config_.mcts_iterations);
+        // Respect time limit also in single-thread mode
+        int safety_iterations = std::max(1, config_.mcts_iterations);
+        for (int i = 0; i < safety_iterations && std::chrono::steady_clock::now() < end_time && !search_cancelled_; ++i) {
+            SingleThreadIteration(root);
+            iterations_performed_++;
+        }
     }
     
     // Calculate search time
@@ -115,6 +124,105 @@ Move MCTS::FindBestMove(const ChessBoard& board, Player player, int dice) {
         });
     
     return (*best_child)->last_move;
+}
+
+// Helper to sort and take top K children by visits
+static void TrimChildren(std::vector<std::shared_ptr<MCTSNode>>& children, int max_children) {
+    std::sort(children.begin(), children.end(), [](const auto& a, const auto& b) {
+        return a->visits.load() > b->visits.load();
+    });
+    if ((int)children.size() > max_children) {
+        children.resize(max_children);
+    }
+}
+
+MCTS::ExportNode MCTS::ExportSearchTree(int max_depth, int max_children) const {
+    ExportNode root_export;
+    if (!persist_last_root_) return root_export;
+    std::shared_ptr<MCTSNode> root_copy;
+    {
+        std::lock_guard<std::mutex> lock(tree_mutex_);
+        root_copy = last_root_;
+    }
+    if (!root_copy) return root_export;
+
+    std::function<void(const std::shared_ptr<MCTSNode>&, ExportNode&, int)> dfs;
+    dfs = [&](const std::shared_ptr<MCTSNode>& node, ExportNode& out, int depth) {
+        if (!node) return;
+        out.move = node->last_move;
+        out.visits = node->visits.load();
+        out.win_rate = node->GetWinRate();
+        out.ucb = node->GetUCBValue(1.414); // exploration constant snapshot
+        out.terminal = node->is_terminal;
+        if (depth >= max_depth) return;
+        std::vector<std::shared_ptr<MCTSNode>> kids;
+        {
+            std::lock_guard<std::mutex> lock(node->children_mutex);
+            kids = node->children; // copy
+        }
+        // Only trim at root level; include all grandchildren for selected top children
+        if (depth == 0) {
+            TrimChildren(kids, max_children);
+        }
+        for (auto& child : kids) {
+            ExportNode child_out;
+            dfs(child, child_out, depth + 1);
+            out.children.push_back(std::move(child_out));
+        }
+    };
+    dfs(root_copy, root_export, 0);
+    return root_export;
+}
+
+// Import an exported tree back into the MCTS structure. This creates a shallow
+// live tree where visits/wins/ucb are restored into node counters so searches
+// can continue (best-effort). This is intentionally conservative: we rebuild
+// nodes with board states based on last_move application where possible.
+void MCTS::ImportSearchTree(const ExportNode& root_export) {
+    if (!persist_last_root_) return;
+
+    // Helper to recursively build nodes
+    std::function<std::shared_ptr<MCTSNode>(const ExportNode&, const std::shared_ptr<MCTSNode>&)> build;
+    build = [&](const ExportNode& exp, const std::shared_ptr<MCTSNode>& parent) -> std::shared_ptr<MCTSNode> {
+        // The root export move may be default; for children we should apply move to parent's board
+        ChessBoard board_state;
+        Player player = Player::LEFT_TOP;
+        int dice = 1;
+        Move move = exp.move;
+
+        std::shared_ptr<MCTSNode> node;
+        if (!parent) {
+            // Root: unknown board, create an empty placeholder
+            node = std::make_shared<MCTSNode>(board_state, player, dice, move);
+        } else {
+            ChessBoard new_board = parent->board;
+            if (move.first.first != -1) {
+                new_board.ExecuteMove(move);
+            }
+            player = GetOpponent(parent->current_player);
+            dice = parent->dice_value; // not precise but acceptable as placeholder
+            node = std::make_shared<MCTSNode>(new_board, player, dice, move);
+            node->parent = parent;
+            parent->children.push_back(node);
+        }
+
+        // Restore counters (approximate): wins_int stored as fraction of WIN_SCALE
+        node->visits.store(exp.visits);
+        int wins_scaled = static_cast<int>(std::round(exp.win_rate * MCTS::WIN_SCALE));
+        node->wins_int.store(wins_scaled);
+        node->is_terminal = exp.terminal;
+
+        // Recurse children
+        for (const auto& child_exp : exp.children) {
+            build(child_exp, node);
+        }
+
+        return node;
+    };
+
+    std::lock_guard<std::mutex> lock(tree_mutex_);
+    last_root_.reset();
+    last_root_ = build(root_export, nullptr);
 }
 
 void MCTS::SetConfig(const AIConfig& config) {
@@ -183,68 +291,62 @@ double MCTS::EvaluatePosition(const ChessBoard& board, Player player) {
 // Private methods
 std::shared_ptr<MCTSNode> MCTS::Selection(std::shared_ptr<MCTSNode> root) {
     auto current = root;
-    
-    while (!current->children.empty() && current->IsFullyExpanded()) {
-        current = current->SelectBestChild(config_.exploration_constant);
-        if (!current) break;
+    while (true) {
+        // Snapshot children safely
+        std::vector<std::shared_ptr<MCTSNode>> snapshot;
+        {
+            std::lock_guard<std::mutex> lock(current->children_mutex);
+            if (current->children.empty() || !current->IsFullyExpanded()) break;
+            snapshot = current->children; // copy
+        }
+        auto best = current->SelectBestChild(config_.exploration_constant);
+        if (!best) break;
+        current = best;
     }
-    
     return current;
 }
 
 std::shared_ptr<MCTSNode> MCTS::Expansion(std::shared_ptr<MCTSNode> node) {
-    if (node->is_terminal) {
-        return node;
-    }
-    
+    if (node->is_terminal) return node;
     auto valid_moves = GetAllPossibleMoves(node->board, node->current_player, node->dice_value);
-    
     if (valid_moves.empty()) {
         node->is_terminal = true;
         node->result = EvaluateGameState(node->board);
         return node;
     }
-    
-    // Add all possible children if not already done
-    if (node->children.size() < valid_moves.size()) {
-        for (size_t i = node->children.size(); i < valid_moves.size(); ++i) {
-            const auto& move = valid_moves[i];
-            
+    {
+        std::lock_guard<std::mutex> lock(node->children_mutex);
+        if (node->children.size() < valid_moves.size()) {
+            // Expand ONE child only (typical incremental expansion)
+            size_t index = node->children.size();
+            const auto& move = valid_moves[index];
             ChessBoard new_board = node->board;
             new_board.ExecuteMove(move);
-            
             Player next_player = GetOpponent(node->current_player);
             int next_dice = RollDice();
-            
             auto child = std::make_shared<MCTSNode>(new_board, next_player, next_dice, move);
             child->parent = node;
             node->children.push_back(child);
-            
-            // Return the newly created child for simulation
-            if (i == node->children.size() - 1) {
-                return child;
-            }
-        }
-        node->is_fully_expanded = true;
-    }
-    
-    // Return a random unvisited child
-    for (auto& child : node->children) {
-        if (child->visits.load() == 0) {
-            return child;
+            if (node->children.size() == valid_moves.size()) node->is_fully_expanded = true;
+            return child; // newly expanded
         }
     }
-    
-    return node->children.empty() ? node : node->children[0];
+    // Pick an unvisited child if any (no lock after snapshot)
+    {
+        std::lock_guard<std::mutex> lock(node->children_mutex);
+        for (auto& child : node->children) {
+            if (child->visits.load(std::memory_order_relaxed) == 0) return child;
+        }
+        if (!node->children.empty()) return node->children[0];
+    }
+    return node;
 }
 
 GameResult MCTS::Simulation(const ChessBoard& board, Player current_player) {
     ChessBoard sim_board = board;
     Player sim_player = current_player;
     int moves_played = 0;
-    const int max_moves = 200; // Prevent infinite games
-    
-    while (moves_played < max_moves) {
+    while (moves_played < SIMULATION_MAX_PLIES) {
         // Check for win condition
         if (sim_board.HasPlayerWon(Player::LEFT_TOP)) {
             return GameResult::LT_WINS;
@@ -266,8 +368,8 @@ GameResult MCTS::Simulation(const ChessBoard& board, Player current_player) {
         const auto& selected_move = valid_moves[move_dist(gen_)];
         
         sim_board.ExecuteMove(selected_move);
-        sim_player = GetOpponent(sim_player);
-        moves_played++;
+    sim_player = GetOpponent(sim_player);
+    ++moves_played;
     }
     
     // If no winner found, use position evaluation

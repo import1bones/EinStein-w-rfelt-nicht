@@ -92,6 +92,15 @@ public:
     bool SaveGame(const std::string& filename) const;
     bool LoadGame(const std::string& filename);
     std::string ExportPGN() const; // Portable Game Notation style export
+
+    // Snapshot helpers (populate state from snapshot manager)
+    void SetBoard(const ChessBoard& board) { board_ = board; }
+    void SetCurrentPlayer(Player player) { current_player_ = player; }
+    void SetCurrentDice(int dice) { current_dice_ = dice; }
+    void SetGameMode(GameMode mode) { game_mode_ = mode; }
+    void SetGameResult(GameResult result) { game_result_ = result; }
+    void SetMoveHistory(const std::vector<GameMove>& history) { move_history_ = history; }
+    void SetCurrentMoveIndex(size_t idx) { current_move_index_ = idx; }
     
     // Events and notifications
     void SetMoveCallback(std::function<void(const GameMove&)> callback) { 
