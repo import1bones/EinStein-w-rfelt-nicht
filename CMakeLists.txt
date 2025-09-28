@@ -190,31 +190,38 @@ endif()
 list(APPEND ALL_SOURCES ${GAME_SOURCES})
 list(APPEND ALL_HEADERS ${GAME_HEADERS})
 
-# Create main executable
-add_executable(${PROJECT_NAME} ${ALL_SOURCES} ${ALL_HEADERS})
+# Create a static library for the core/game logic so tests and multiple executables can link to it.
+# Exclude the application entry point (src/main.cpp) from the library.
+set(LIB_SOURCES ${ALL_SOURCES})
+list(REMOVE_ITEM LIB_SOURCES src/main.cpp)
 
-# Set target properties
-set_target_properties(${PROJECT_NAME} PROPERTIES
+add_library(einstein_lib STATIC ${LIB_SOURCES} ${ALL_HEADERS})
+set_target_properties(einstein_lib PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
 
-# Link libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    Threads::Threads
-)
+# Link common libraries to the library target
+target_link_libraries(einstein_lib PRIVATE Threads::Threads)
 
 if(HAVE_NLOHMANN_JSON)
-    # If we have an imported nlohmann target (from find_package or FetchContent), link it.
     if(TARGET nlohmann_json::nlohmann_json)
-        target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE USE_NLOHMANN_JSON=1)
+        target_link_libraries(einstein_lib PRIVATE nlohmann_json::nlohmann_json)
+        target_compile_definitions(einstein_lib PRIVATE USE_NLOHMANN_JSON=1)
     else()
         # Vendored single-header mode: add include directory and define macro, no linking required.
-        target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include/third_party)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE USE_NLOHMANN_JSON=1)
+        target_include_directories(einstein_lib PRIVATE ${CMAKE_SOURCE_DIR}/include/third_party)
+        target_compile_definitions(einstein_lib PRIVATE USE_NLOHMANN_JSON=1)
     endif()
 endif()
+
+# Create main executable and link against the library
+add_executable(${PROJECT_NAME} src/main.cpp)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)
+target_link_libraries(${PROJECT_NAME} PRIVATE einstein_lib)
 
 if(GRAPHICS_AVAILABLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -260,27 +267,33 @@ if(AI_AVAILABLE)
 endif()
 
 # Build tests
-add_executable(${PROJECT_NAME}_tests tests/test_main.cpp)
+file(GLOB UNIT_TEST_SOURCES ${CMAKE_SOURCE_DIR}/tests/unit/*.cpp)
+add_executable(${PROJECT_NAME}_tests tests/test_main.cpp ${UNIT_TEST_SOURCES})
 set_target_properties(${PROJECT_NAME}_tests PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
 
-target_link_libraries(${PROJECT_NAME}_tests Threads::Threads)
+target_link_libraries(${PROJECT_NAME}_tests PRIVATE einstein_lib vmodel_framework)
 target_include_directories(${PROJECT_NAME}_tests PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests)
 
-# Build V-Model test framework
-add_executable(${PROJECT_NAME}_vmodel_tests 
-    tests/SimpleVModelRunner.cpp
-    tests/framework/VModelTestFramework.cpp
+# Build V-Model test framework as a reusable library so unit tests can link to it
+add_library(vmodel_framework STATIC tests/framework/VModelTestFramework.cpp)
+set_target_properties(vmodel_framework PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
 )
+target_include_directories(vmodel_framework PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests)
 
+# Build V-Model test runner executable and link with the framework and core library
+add_executable(${PROJECT_NAME}_vmodel_tests
+    tests/SimpleVModelRunner.cpp
+)
 set_target_properties(${PROJECT_NAME}_vmodel_tests PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
-
-target_link_libraries(${PROJECT_NAME}_vmodel_tests Threads::Threads)
+target_link_libraries(${PROJECT_NAME}_vmodel_tests PRIVATE einstein_lib vmodel_framework)
 target_include_directories(${PROJECT_NAME}_vmodel_tests PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests)
 
 # Register tests with CTest

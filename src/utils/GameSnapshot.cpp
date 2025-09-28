@@ -12,6 +12,9 @@
 using ein_json::Value;
 using ein_json::Object;
 using ein_json::Array;
+#ifdef USE_NLOHMANN_JSON
+#include <nlohmann/json.hpp>
+#endif
 
 namespace Einstein {
 
@@ -38,46 +41,6 @@ std::string MCTSNodeSnapshot::ToString() const {
     return oss.str();
 }
 
-void MCTSNodeSnapshot::FromString(const std::string& data) {
-    std::istringstream iss(data);
-    std::string line;
-    children.clear();
-    
-    while (std::getline(iss, line)) {
-        size_t colon_pos = line.find(':');
-        if (colon_pos == std::string::npos) continue;
-        
-        std::string key = line.substr(0, colon_pos);
-        std::string value = line.substr(colon_pos + 1);
-        
-        if (key == "NODE_POS") {
-            size_t comma = value.find(',');
-            if (comma != std::string::npos) {
-                position.first = std::stoi(value.substr(0, comma));
-                position.second = std::stoi(value.substr(comma + 1));
-            }
-        } else if (key == "NODE_PLAYER") {
-            player = static_cast<Player>(std::stoi(value));
-        } else if (key == "NODE_DICE") {
-            dice_value = std::stoi(value);
-        } else if (key == "NODE_VISITS") {
-            visits = std::stoi(value);
-        } else if (key == "NODE_WINS") {
-            wins = std::stod(value);
-        } else if (key == "NODE_UCB") {
-            ucb_value = std::stod(value);
-        } else if (key == "NODE_EXPANDED") {
-            is_fully_expanded = (std::stoi(value) == 1);
-        } else if (key == "NODE_TERMINAL") {
-            is_terminal = (std::stoi(value) == 1);
-        } else if (key == "NODE_PARENT") {
-            parent_index = std::stoi(value);
-        }
-        // Child parsing would be more complex, simplified for now
-    }
-}
-
-// MCTSSnapshot implementation
 std::string MCTSSnapshot::ToString() const {
     std::ostringstream oss;
     
@@ -141,7 +104,6 @@ std::string MCTSSnapshot::ToJson() const {
         nj["last_move"] = Value(lm);
 
         nj["visits"] = Value(node.visits);
-        nj["wins"] = Value(node.wins);
         nj["ucb"] = Value(node.ucb_value);
         nj["is_terminal"] = Value(node.is_terminal);
         // prior/virtual_loss not present in MCTSNodeSnapshot; include zeros for compatibility
@@ -159,65 +121,6 @@ std::string MCTSSnapshot::ToJson() const {
 
     j["root_node"] = node_to_json(root_node, MAX_DEPTH);
     return Value(j).dump(2);
-}
-
-void MCTSSnapshot::FromString(const std::string& data) {
-    try {
-        Value root = ein_json::parse(data);
-        if (root.is_object()) {
-            const auto& obj = root.as_object();
-            if (obj.count("total_iterations")) total_iterations = obj.at("total_iterations").as_int();
-            if (obj.count("completed_iterations")) completed_iterations = obj.at("completed_iterations").as_int();
-            if (obj.count("exploration_constant")) exploration_constant = obj.at("exploration_constant").as_double();
-            if (obj.count("time_limit")) time_limit = obj.at("time_limit").as_double();
-            if (obj.count("elapsed_time")) elapsed_time = obj.at("elapsed_time").as_double();
-            if (obj.count("best_evaluation")) best_evaluation = obj.at("best_evaluation").as_double();
-            if (obj.count("nodes_created")) nodes_created = obj.at("nodes_created").as_int();
-            if (obj.count("nodes_expanded")) nodes_expanded = obj.at("nodes_expanded").as_int();
-            if (obj.count("avg_simulation_time")) avg_simulation_time = obj.at("avg_simulation_time").as_double();
-
-            principal_variation.clear();
-            if (obj.count("principal_variation") && obj.at("principal_variation").is_array()) {
-                for (const auto& item : obj.at("principal_variation").as_array()) {
-                    if (item.is_array()) {
-                        const auto& arr = item.as_array();
-                        if (arr.size() == 4) {
-                            Move m = {{arr[0].as_int(), arr[1].as_int()}, {arr[2].as_int(), arr[3].as_int()}};
-                            principal_variation.push_back(m);
-                        }
-                    }
-                }
-            }
-
-            if (obj.count("root_node")) {
-                std::function<void(const Value&, MCTSNodeSnapshot&)> conv;
-                conv = [&](const Value& nj, MCTSNodeSnapshot& out) {
-                    if (nj.is_object()) {
-                        const auto& nobj = nj.as_object();
-                        if (nobj.count("last_move") && nobj.at("last_move").is_array()) {
-                            const auto& lm = nobj.at("last_move").as_array();
-                            if (lm.size() == 4) out.last_move = {{lm[0].as_int(), lm[1].as_int()}, {lm[2].as_int(), lm[3].as_int()}};
-                        }
-                        if (nobj.count("visits")) out.visits = nobj.at("visits").as_int();
-                        if (nobj.count("wins")) out.wins = nobj.at("wins").as_double();
-                        if (nobj.count("ucb")) out.ucb_value = nobj.at("ucb").as_double();
-                        if (nobj.count("is_terminal")) out.is_terminal = nobj.at("is_terminal").as_int() != 0;
-                        out.children.clear();
-                        if (nobj.count("children") && nobj.at("children").is_array()) {
-                            for (const auto& c : nobj.at("children").as_array()) {
-                                MCTSNodeSnapshot child;
-                                conv(c, child);
-                                out.children.push_back(child);
-                            }
-                        }
-                    }
-                };
-                conv(obj.at("root_node"), root_node);
-            }
-        }
-    } catch (...) {
-        // ignore
-    }
 }
 
 std::vector<Move> MCTSSnapshot::GetBestMoves(int count) const {
@@ -319,7 +222,7 @@ void AIThinkingSnapshot::FromString(const std::string& data) {
     try {
         Value root = ein_json::parse(data);
         if (root.is_object()) {
-            const auto& obj = root.as_object();
+            auto obj = root.as_object();
             if (obj.count("mcts_iterations")) mcts_iterations = obj.at("mcts_iterations").as_int();
             if (obj.count("thinking_time")) thinking_time = obj.at("thinking_time").as_double();
             if (obj.count("position_evaluation")) position_evaluation = obj.at("position_evaluation").as_double();
@@ -414,7 +317,7 @@ void GameSnapshot::FromString(const std::string& data) {
     try {
         Value root = ein_json::parse(data);
         if (root.is_object()) {
-            const auto& obj = root.as_object();
+            auto obj = root.as_object();
             if (obj.count("snapshot_id") && obj.at("snapshot_id").is_string()) snapshot_id = obj.at("snapshot_id").as_string();
             if (obj.count("turn_number")) turn_number = obj.at("turn_number").as_int();
             if (obj.count("current_player")) current_player = static_cast<Player>(obj.at("current_player").as_int());
@@ -489,27 +392,21 @@ bool GameSnapshot::SaveToFile(const std::string& filename) const {
 
 bool GameSnapshot::LoadFromFile(const std::string& filename) {
     std::ifstream file(filename);
-    if (!file.is_open()) {
+    if (!file.is_open()) return false;
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    try {
+        FromString(ss.str());
+    } catch (...) {
         return false;
     }
-    
-    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    FromString(content);
     return true;
 }
 
 std::string GameSnapshot::GetSnapshotSummary() const {
     std::ostringstream oss;
-    oss << "Snapshot " << snapshot_id << " - Turn " << turn_number;
-    oss << " - Player: " << (current_player == Player::LEFT_TOP ? "LT" : "RB");
-    oss << " - Dice: " << current_dice;
-    oss << " - Phase: " << current_phase;
-    oss << " - Valid moves: " << current_valid_moves.size();
+    oss << snapshot_id << " (turn=" << turn_number << ", player=" << static_cast<int>(current_player) << ")";
     return oss.str();
-}
-
-void GameSnapshot::AddDebugInfo(const std::string& info) {
-    debug_log.push_back(info);
 }
 
 void GameSnapshot::UpdateFromGameState(const GameState& game_state) {
@@ -520,61 +417,148 @@ void GameSnapshot::UpdateFromGameState(const GameState& game_state) {
     game_result = game_state.GetGameResult();
     move_history = game_state.GetMoveHistory();
     current_move_index = game_state.GetMoveCount();
-    
-    // Get valid moves
-    current_valid_moves = game_state.GetBoard().GetValidMoves(current_player, current_dice);
+    total_game_time = game_state.GetStatistics().GetGameDurationSeconds();
 }
 
-// SnapshotManager implementation
-SnapshotManager::SnapshotManager() 
-    : snapshots_dir_("snapshots"), auto_save_enabled_(true), auto_save_interval_(1), move_counter_(0) {
-    EnsureSnapshotsDirectory();
-}
+void MCTSSnapshot::FromString(const std::string& data) {
+#ifdef USE_NLOHMANN_JSON
+    try {
+        nlohmann::json nj = nlohmann::json::parse(data);
+        if (nj.is_object()) {
+            if (nj.contains("total_iterations")) total_iterations = nj["total_iterations"].get<int>();
+            if (nj.contains("completed_iterations")) completed_iterations = nj["completed_iterations"].get<int>();
+            if (nj.contains("exploration_constant")) exploration_constant = nj["exploration_constant"].get<double>();
+            if (nj.contains("time_limit")) time_limit = nj["time_limit"].get<double>();
+            if (nj.contains("elapsed_time")) elapsed_time = nj["elapsed_time"].get<double>();
+            if (nj.contains("best_evaluation")) best_evaluation = nj["best_evaluation"].get<double>();
+            if (nj.contains("nodes_created")) nodes_created = nj["nodes_created"].get<int>();
+            if (nj.contains("nodes_expanded")) nodes_expanded = nj["nodes_expanded"].get<int>();
+            if (nj.contains("avg_simulation_time")) avg_simulation_time = nj["avg_simulation_time"].get<double>();
 
-std::string SnapshotManager::CreateSnapshot(const GameState& game_state, const std::string& phase, const AIThinkingSnapshot* ai_thinking) {
-    GameSnapshot snapshot;
-    snapshot.UpdateFromGameState(game_state);
-    snapshot.current_phase = phase.empty() ? "auto_save" : phase;
-    snapshot.turn_number = ++move_counter_;
+            principal_variation.clear();
+            if (nj.contains("principal_variation") && nj["principal_variation"].is_array()) {
+                for (const auto& item : nj["principal_variation"]) {
+                    if (item.is_array() && item.size() == 4) {
+                        Move m = {{item[0].get<int>(), item[1].get<int>()}, {item[2].get<int>(), item[3].get<int>()}};
+                        principal_variation.push_back(m);
+                    }
+                }
+            }
 
-    std::string snapshot_id = GenerateSnapshotId();
-    snapshot.snapshot_id = snapshot_id;
+            std::function<void(const nlohmann::json&, MCTSNodeSnapshot&)> conv = [&](const nlohmann::json& node, MCTSNodeSnapshot& out) {
+                if (!node.is_object()) return;
+                if (node.contains("last_move") && node["last_move"].is_array() && node["last_move"].size() == 4) {
+                    out.last_move = {{node["last_move"][0].get<int>(), node["last_move"][1].get<int>()}, {node["last_move"][2].get<int>(), node["last_move"][3].get<int>()}};
+                }
+                if (node.contains("visits")) out.visits = node["visits"].get<int>();
+                if (node.contains("wins")) out.wins = node["wins"].get<double>();
+                if (node.contains("ucb")) out.ucb_value = node["ucb"].get<double>();
+                if (node.contains("is_terminal")) out.is_terminal = node["is_terminal"].get<bool>();
+                out.children.clear();
+                if (node.contains("children") && node["children"].is_array()) {
+                    for (const auto& c : node["children"]) {
+                        MCTSNodeSnapshot child;
+                        conv(c, child);
+                        out.children.push_back(child);
+                    }
+                }
+            };
 
-    if (ai_thinking) {
-        snapshot.ai_thinking = *ai_thinking;
-        snapshot.ai_thinking.has_mcts_data = ai_thinking->has_mcts_data;
+            if (nj.contains("root_node")) {
+                conv(nj["root_node"], root_node);
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "MCTSSnapshot::FromString parse error: " << e.what() << "\n";
     }
+#else
+    // Fallback to existing ein_json-based parsing
+    try {
+        Value root = ein_json::parse(data);
+        if (root.is_object()) {
+            auto obj = root.as_object();
+            if (obj.count("total_iterations")) total_iterations = obj.at("total_iterations").as_int();
+            if (obj.count("completed_iterations")) completed_iterations = obj.at("completed_iterations").as_int();
+            if (obj.count("exploration_constant")) exploration_constant = obj.at("exploration_constant").as_double();
+            if (obj.count("time_limit")) time_limit = obj.at("time_limit").as_double();
+            if (obj.count("elapsed_time")) elapsed_time = obj.at("elapsed_time").as_double();
+            if (obj.count("best_evaluation")) best_evaluation = obj.at("best_evaluation").as_double();
+            if (obj.count("nodes_created")) nodes_created = obj.at("nodes_created").as_int();
+            if (obj.count("nodes_expanded")) nodes_expanded = obj.at("nodes_expanded").as_int();
+            if (obj.count("avg_simulation_time")) avg_simulation_time = obj.at("avg_simulation_time").as_double();
 
-    if (SaveSnapshot(snapshot_id, snapshot)) {
-        latest_snapshot_id_ = snapshot_id;
-        return snapshot_id;
+            principal_variation.clear();
+            if (obj.count("principal_variation") && obj.at("principal_variation").is_array()) {
+                for (const auto& item : obj.at("principal_variation").as_array()) {
+                    if (item.is_array()) {
+                        const auto& arr = item.as_array();
+                        if (arr.size() == 4) {
+                            Move m = {{arr[0].as_int(), arr[1].as_int()}, {arr[2].as_int(), arr[3].as_int()}};
+                            principal_variation.push_back(m);
+                        }
+                    }
+                }
+            }
+
+            if (obj.count("root_node")) {
+                std::function<void(const Value&, MCTSNodeSnapshot&)> conv;
+                conv = [&](const Value& nj, MCTSNodeSnapshot& out) {
+                    if (nj.is_object()) {
+                        auto nobj = nj.as_object();
+                        if (nobj.count("last_move") && nobj.at("last_move").is_array()) {
+                            auto lm = nobj.at("last_move").as_array();
+                            if (lm.size() == 4) out.last_move = {{lm[0].as_int(), lm[1].as_int()}, {lm[2].as_int(), lm[3].as_int()}};
+                        }
+                        if (nobj.count("visits")) out.visits = nobj.at("visits").as_int();
+                        if (nobj.count("wins")) out.wins = nobj.at("wins").as_double();
+                        if (nobj.count("ucb")) out.ucb_value = nobj.at("ucb").as_double();
+                        if (nobj.count("is_terminal")) out.is_terminal = nobj.at("is_terminal").as_int() != 0;
+                        out.children.clear();
+                        for (const auto& kv : nobj) {
+                            if (kv.first == "children") {
+                                const Value& maybe_children = kv.second;
+                                if (maybe_children.is_array()) {
+                                    auto carr = maybe_children.as_array();
+                                    for (const auto& elem : carr) {
+                                        MCTSNodeSnapshot child;
+                                        conv(elem, child);
+                                        out.children.push_back(child);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+                conv(obj.at("root_node"), root_node);
+            }
+        }
+    } catch (...) {
+        // ignore
     }
-
-    return "";
+#endif
 }
-
+// Load a snapshot into a live GameState using setters on GameState
 bool SnapshotManager::LoadSnapshot(const std::string& snapshot_id, GameState& game_state) {
     GameSnapshot snapshot;
-    if (snapshot.LoadFromFile(GetSnapshotFilename(snapshot_id))) {
-        // Populate provided GameState with snapshot contents
-        // This requires GameState to expose setters (added to GameState.h)
-        // Note: We only update core fields here; callbacks are not preserved
-        try {
-            // Apply snapshot fields to the provided GameState using the new setters
-            game_state.SetBoard(snapshot.board);
-            game_state.SetCurrentPlayer(snapshot.current_player);
-            game_state.SetCurrentDice(snapshot.current_dice);
-            game_state.SetGameMode(snapshot.game_mode);
-            game_state.SetGameResult(snapshot.game_result);
-            game_state.SetMoveHistory(snapshot.move_history);
-            game_state.SetCurrentMoveIndex(snapshot.current_move_index);
-            // Note: we intentionally do not reattach callbacks or AI pointers here
-        } catch (...) {
-            // Fallback: do nothing
-        }
-        return true;
+    if (!snapshot.LoadFromFile(GetSnapshotFilename(snapshot_id))) {
+        return false;
     }
-    return false;
+    // This requires GameState to expose setters (added to GameState.h)
+    // Note: We only update core fields here; callbacks are not preserved
+    try {
+        // Apply snapshot fields to the provided GameState using the new setters
+        game_state.SetBoard(snapshot.board);
+        game_state.SetCurrentPlayer(snapshot.current_player);
+        game_state.SetCurrentDice(snapshot.current_dice);
+        game_state.SetGameMode(snapshot.game_mode);
+        game_state.SetGameResult(snapshot.game_result);
+        game_state.SetMoveHistory(snapshot.move_history);
+        game_state.SetCurrentMoveIndex(snapshot.current_move_index);
+        // Note: we intentionally do not reattach callbacks or AI pointers here
+    } catch (...) {
+        // Fallback: do nothing
+    }
+    return true;
 }
 
 bool SnapshotManager::SaveSnapshot(const std::string& snapshot_id, const GameSnapshot& snapshot) {
@@ -633,6 +617,27 @@ GameSnapshot SnapshotManager::GetSnapshot(const std::string& snapshot_id) const 
     GameSnapshot snapshot;
     snapshot.LoadFromFile(GetSnapshotFilename(snapshot_id));
     return snapshot;
+}
+
+// Minimal SnapshotManager constructor and CreateSnapshot implementation
+SnapshotManager::SnapshotManager()
+    : snapshots_dir_("snapshots"), latest_snapshot_id_(), auto_save_enabled_(false), auto_save_interval_(1), move_counter_(0) {
+    EnsureSnapshotsDirectory();
+}
+
+std::string SnapshotManager::CreateSnapshot(const GameState& game_state, const std::string& phase, const AIThinkingSnapshot* ai_thinking) {
+    GameSnapshot snapshot;
+    snapshot.UpdateFromGameState(game_state);
+    if (ai_thinking) {
+        snapshot.ai_thinking = *ai_thinking;
+    }
+    std::string id = GenerateSnapshotId();
+    snapshot.snapshot_id = id;
+    if (snapshot.SaveToFile(GetSnapshotFilename(id))) {
+        latest_snapshot_id_ = id;
+        return id;
+    }
+    return std::string();
 }
 
 std::string SnapshotManager::GenerateSnapshotId() const {
