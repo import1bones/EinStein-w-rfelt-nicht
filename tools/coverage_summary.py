@@ -46,6 +46,11 @@ def main():
         help='Source files or directories to report (default: src/)',
         default=['src']
     )
+    parser.add_argument(
+        '--list-files',
+        action='store_true',
+        help='Only list the source files that would be included and exit'
+    )
     args = parser.parse_args()
 
     profdata = args.profdata
@@ -81,21 +86,45 @@ def main():
                         or f.endswith('.h')
                         or f.endswith('.hpp')
                     ):
-                        file_args.append(os.path.join(root, f))
+                        path = os.path.join(root, f)
+                        # Exclude any files under a tests/ directory
+                        norm = os.path.normpath(path)
+                        tests_segment = os.sep + 'tests' + os.sep
+                        tests_prefix = 'tests' + os.sep
+                        if tests_segment in norm or norm.startswith(tests_prefix):
+                            # Skip test files from coverage-sources
+                            continue
+                        file_args.append(path)
         elif os.path.isfile(s):
-            file_args.append(s)
+            norm = os.path.normpath(s)
+            tests_segment = os.sep + 'tests' + os.sep
+            tests_prefix = 'tests' + os.sep
+            if tests_segment in norm or norm.startswith(tests_prefix):
+                # Skip test files passed explicitly
+                pass
+            else:
+                file_args.append(s)
 
     files_str = ' '.join(shlex.quote(p) for p in file_args)
     if not files_str:
         print('No source files found to report on.')
         return 4
 
-    # Run llvm-cov report (text) to get per-file summary
+    if args.list_files:
+        print('Files that would be reported:')
+        for p in file_args:
+            print(p)
+        return 0
+
+    # Run llvm-cov report (text) to get per-file summary.
+    # Provide explicit source file list so test files are not included
+    # in the report.
     cmd = (
         f'xcrun llvm-cov report {shlex.quote(args.binary)} '
         f'-instr-profile={shlex.quote(profdata)} '
         f'-object {shlex.quote(args.obj)} '
-        f'-path-equivalence="{os.getcwd()},{os.getcwd()}"'
+        f'-path-equivalence="{os.getcwd()},{os.getcwd()}" '
+        f'{files_str}'
     )
     code, out = run(cmd)
     if code != 0:
