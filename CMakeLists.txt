@@ -200,29 +200,36 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 # Link libraries
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME} PRIVATE
     Threads::Threads
 )
 
 if(HAVE_NLOHMANN_JSON)
-    target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_NLOHMANN_JSON=1)
+    # If we have an imported nlohmann target (from find_package or FetchContent), link it.
+    if(TARGET nlohmann_json::nlohmann_json)
+        target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE USE_NLOHMANN_JSON=1)
+    else()
+        # Vendored single-header mode: add include directory and define macro, no linking required.
+        target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include/third_party)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE USE_NLOHMANN_JSON=1)
+    endif()
 endif()
 
 if(GRAPHICS_AVAILABLE)
-    target_link_libraries(${PROJECT_NAME}
+    target_link_libraries(${PROJECT_NAME} PRIVATE
         ${SDL2_LIBRARIES}
     )
     if(SDL2_TTF_FOUND)
-        target_link_libraries(${PROJECT_NAME} ${SDL2_TTF_LIBRARIES})
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${SDL2_TTF_LIBRARIES})
     endif()
     if(SDL2_IMAGE_FOUND)
-        target_link_libraries(${PROJECT_NAME} ${SDL2_IMAGE_LIBRARIES})
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${SDL2_IMAGE_LIBRARIES})
     endif()
 endif()
 
 if(AI_AVAILABLE)
-    target_link_libraries(${PROJECT_NAME}
+    target_link_libraries(${PROJECT_NAME} PRIVATE
         pybind11::embed
         ${Python3_LIBRARIES}
     )
@@ -230,11 +237,11 @@ endif()
 
 # Platform-specific linking
 if(WIN32)
-    target_link_libraries(${PROJECT_NAME} ws2_32 winmm)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32 winmm)
 elseif(UNIX AND NOT APPLE)
-    target_link_libraries(${PROJECT_NAME} m dl)
+    target_link_libraries(${PROJECT_NAME} PRIVATE m dl)
 elseif(APPLE)
-    target_link_libraries(${PROJECT_NAME} "-framework CoreFoundation")
+    target_link_libraries(${PROJECT_NAME} PRIVATE "-framework CoreFoundation")
 endif()
 
 # Copy assets and configuration
@@ -317,6 +324,21 @@ message(STATUS "AI support (Python/pybind11): ${AI_AVAILABLE}")
 message(STATUS "Threading support: ON")
 message(STATUS "Testing support: ON")
 message(STATUS "==========================================")
+# Optional tools: reserialize_snapshots (only available when nlohmann::json is present)
+if(HAVE_NLOHMANN_JSON)
+    add_executable(reserialize_snapshots src/tools/reserialize_snapshots.cpp)
+    # If an imported target exists, link it; otherwise rely on vendored header include
+    if(TARGET nlohmann_json::nlohmann_json)
+        target_link_libraries(reserialize_snapshots PRIVATE nlohmann_json::nlohmann_json Threads::Threads)
+    else()
+        target_include_directories(reserialize_snapshots PRIVATE ${CMAKE_SOURCE_DIR}/include/third_party)
+        target_link_libraries(reserialize_snapshots PRIVATE Threads::Threads)
+    endif()
+    set_target_properties(reserialize_snapshots PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+    install(TARGETS reserialize_snapshots DESTINATION bin)
+else()
+    message(STATUS "Reserialize tool not available: nlohmann::json not found")
+endif()
 # 自动复制 compile_commands.json 到项目根目录
 ## The project previously copied compile_commands.json to the source root after build
 ## but this can fail in some environments (file locks/permissions). If you need

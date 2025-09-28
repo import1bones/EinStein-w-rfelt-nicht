@@ -110,6 +110,8 @@ std::string MCTSSnapshot::ToString() const {
 
 // Simple JSON serialization for MCTSSnapshot (no external deps)
 std::string MCTSSnapshot::ToJson() const {
+    // Produce a compact, safe JSON structure limited to a small depth to avoid
+    // emitting malformed nested strings. We include essential stats only.
     Object j;
     j["total_iterations"] = Value(total_iterations);
     j["completed_iterations"] = Value(completed_iterations);
@@ -125,22 +127,37 @@ std::string MCTSSnapshot::ToJson() const {
     for (const auto& m : principal_variation) pv.emplace_back(Array{Value(m.first.first), Value(m.first.second), Value(m.second.first), Value(m.second.second)});
     j["principal_variation"] = Value(pv);
 
-    std::function<Value(const MCTSNodeSnapshot&)> node_to_json = [&](const MCTSNodeSnapshot& node) -> Value {
+    // Depth-limited node serializer: include only numeric/boolean fields and arrays
+    const int MAX_DEPTH = 2;
+    const size_t MAX_CHILDREN = 5;
+    std::function<Value(const MCTSNodeSnapshot&, int)> node_to_json = [&](const MCTSNodeSnapshot& node, int depth) -> Value {
         Object nj;
-        nj["last_move"] = Value(Array{Value(node.last_move.first.first), Value(node.last_move.first.second), Value(node.last_move.second.first), Value(node.last_move.second.second)});
+        // last_move
+        Array lm;
+        lm.emplace_back(Value(node.last_move.first.first));
+        lm.emplace_back(Value(node.last_move.first.second));
+        lm.emplace_back(Value(node.last_move.second.first));
+        lm.emplace_back(Value(node.last_move.second.second));
+        nj["last_move"] = Value(lm);
+
         nj["visits"] = Value(node.visits);
         nj["wins"] = Value(node.wins);
         nj["ucb"] = Value(node.ucb_value);
         nj["is_terminal"] = Value(node.is_terminal);
+        // prior/virtual_loss not present in MCTSNodeSnapshot; include zeros for compatibility
         nj["prior"] = Value(0.0);
         nj["virtual_loss"] = Value(0);
+
         Array children;
-        for (const auto& c : node.children) children.push_back(node_to_json(c));
+        if (depth > 0 && !node.children.empty()) {
+            size_t count = std::min(node.children.size(), MAX_CHILDREN);
+            for (size_t i = 0; i < count; ++i) children.push_back(node_to_json(node.children[i], depth - 1));
+        }
         nj["children"] = Value(children);
         return Value(nj);
     };
 
-    j["root_node"] = node_to_json(root_node);
+    j["root_node"] = node_to_json(root_node, MAX_DEPTH);
     return Value(j).dump(2);
 }
 
