@@ -1,5 +1,5 @@
 BasedOnStyle: Google
-Standard: Cpp17
+Standard: c++17
 IndentWidth: 4
 ColumnLimit: 120
 AllowShortFunctionsOnASingleLine: Inline

@@ -1,0 +1,67 @@
+{
+  "game": {
+    "title": "Einstein würfelt nicht!",
+    "version": "2.0.0",
+    "default_mode": "human_vs_ai"
+  },
+  "graphics": {
+    "window_width": 800,
+    "window_height": 600,
+    "board_size": 500,
+    "fullscreen": false,
+    "vsync": true,
+    "fps_limit": 60,
+    "themes": {
+      "default": {
+        "background_color": [255, 255, 255],
+        "board_color": [139, 69, 19],
+        "player1_color": [255, 0, 0],
+        "player2_color": [0, 0, 255],
+        "highlight_color": [255, 255, 0]
+      }
+    }
+  },
+  "ai": {
+    "default_difficulty": "medium",
+    "mcts": {
+      "iterations": 1000,
+      "exploration_constant": 1.414,
+      "thinking_time_seconds": 5.0,
+      "use_neural_network": true,
+      "thread_count": 4
+    },
+    "neural_network": {
+      "model_path": "ml_models/einstein_model.pb",
+      "input_size": 150,
+      "hidden_layers": [600, 600, 300],
+      "output_size": 6
+    }
+  },
+  "audio": {
+    "enabled": true,
+    "master_volume": 0.7,
+    "sfx_volume": 0.8,
+    "music_volume": 0.5
+  },
+  "controls": {
+    "mouse_enabled": true,
+    "keyboard_shortcuts": {
+      "new_game": "N",
+      "undo": "U",
+      "redo": "R",
+      "quit": "Q",
+      "fullscreen": "F11"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "file_output": true,
+    "console_output": true,
+    "log_file": "logs/einstein.log"
+  },
+  "performance": {
+    "enable_multithreading": true,
+    "memory_pool_size": 1048576,
+    "cache_size": 10000
+  }
+}
