@@ -4,6 +4,7 @@
 # Build directories
 build/
 builds/
+build-coverage/
 out/
 cmake-build-*/
 Debug/
@@ -277,3 +278,5 @@ personal_*
 !tests/.gitkeep
 !weight/.gitkeep
 !docs/.gitkeep
+
+install/

@@ -21,7 +21,7 @@ public:
     };
 
     // Inline singleton instance so it's available to all translation units that include this header
-    static TestRunner& Instance() {
+    static auto Instance() -> TestRunner& {
         static TestRunner instance;
         return instance;
     }
@@ -31,7 +31,7 @@ public:
     }
 
     void RunAllTests() {
-        std::cout << "Running " << tests_.size() << " tests...\n" << std::endl;
+        std::cout << "Running " << tests_.size() << " tests...\n";
 
         int passed = 0;
         int failed = 0;
@@ -45,7 +45,7 @@ public:
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration<double, std::milli>(end - start).count();
 
-                std::cout << "[PASS] " << test.first << " (" << duration << "ms)" << std::endl;
+                std::cout << "[PASS] " << test.first << " (" << duration << "ms)\n";
 
                 results_.push_back({test.first, true, "", duration});
                 passed++;
@@ -54,7 +54,7 @@ public:
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration<double, std::milli>(end - start).count();
 
-                std::cout << "[FAIL] " << test.first << " - " << e.what() << " (" << duration << "ms)" << std::endl;
+                std::cout << "[FAIL] " << test.first << " - " << e.what() << " (" << duration << "ms)\n";
 
                 results_.push_back({test.first, false, e.what(), duration});
                 failed++;
@@ -63,29 +63,29 @@ public:
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration<double, std::milli>(end - start).count();
 
-                std::cout << "[FAIL] " << test.first << " - Unknown exception (" << duration << "ms)" << std::endl;
+                std::cout << "[FAIL] " << test.first << " - Unknown exception (" << duration << "ms)\n";
 
                 results_.push_back({test.first, false, "Unknown exception", duration});
                 failed++;
             }
         }
 
-        std::cout << "\nTest Results:" << std::endl;
-        std::cout << "  Passed: " << passed << std::endl;
-        std::cout << "  Failed: " << failed << std::endl;
-        std::cout << "  Total:  " << (passed + failed) << std::endl;
+    std::cout << "\nTest Results:\n";
+    std::cout << "  Passed: " << passed << "\n";
+    std::cout << "  Failed: " << failed << "\n";
+    std::cout << "  Total:  " << (passed + failed) << "\n";
 
         if (failed > 0) {
-            std::cout << "\nFailed tests:" << std::endl;
+            std::cout << "\nFailed tests:\n";
             for (const auto& result : results_) {
                 if (!result.passed) {
-                    std::cout << "  - " << result.name << ": " << result.error_message << std::endl;
+                    std::cout << "  - " << result.name << ": " << result.error_message << "\n";
                 }
             }
         }
     }
 
-    const std::vector<TestResult>& GetResults() const { return results_; }
+    [[nodiscard]] auto GetResults() const -> const std::vector<TestResult>& { return results_; }
 
 private:
     std::vector<std::pair<std::string, std::function<void()>>> tests_;
@@ -96,28 +96,67 @@ private:
 
 // Lightweight ToString helpers so assertions can stringify any printable type
 namespace TestInternal {
-    inline std::string ToString(const std::string& s) { return s; }
-    inline std::string ToString(const char* s) { return s ? std::string(s) : std::string("(null)"); }
+    inline auto ToString(const std::string& str) -> std::string { return str; }
+    inline auto ToString(const char* cstr) -> std::string { return cstr ? std::string(cstr) : std::string("(null)"); }
     template <typename T, typename = std::enable_if_t<std::is_arithmetic<T>::value>>
-    inline std::string ToString(T v) { return std::to_string(v); }
+    inline auto ToString(T value) -> std::string { return std::to_string(value); }
     template <typename T>
-    inline std::string ToStringFallback(const T& v) {
-        std::ostringstream oss; oss << v; return oss.str();
+    inline auto ToStringFallback(const T& val) -> std::string {
+        std::ostringstream oss; oss << val; return oss.str();
     }
     template <typename T>
-    inline std::string ToStringGeneric(const T& v) {
-        if constexpr (std::is_arithmetic_v<T>) return ToString(v);
-        else if constexpr (std::is_same_v<T, std::string>) return ToString(v);
-        else return ToStringFallback(v);
+    inline auto ToStringGeneric(const T& val) -> std::string {
+        if constexpr (std::is_arithmetic_v<T>) return ToString(val);
+        else if constexpr (std::is_same_v<T, std::string>) return ToString(val);
+        else return ToStringFallback(val);
     }
 }
 
-// Assertion macros
-#define ASSERT_TRUE(condition) if (!(condition)) throw std::runtime_error("Assertion failed: " #condition);
-#define ASSERT_FALSE(condition) if (condition) throw std::runtime_error("Assertion failed: " #condition " should be false");
-#define ASSERT_EQ(expected, actual) if ((expected) != (actual)) throw std::runtime_error(std::string("Assertion failed: expected ") + TestInternal::ToStringGeneric(expected) + std::string(" but got ") + TestInternal::ToStringGeneric(actual));
-#define ASSERT_NE(expected, actual) if ((expected) == (actual)) throw std::runtime_error(std::string("Assertion failed: ") + TestInternal::ToStringGeneric(expected) + std::string(" should not equal ") + TestInternal::ToStringGeneric(actual));
-#define ASSERT_STREQ(expected, actual) if (std::string(expected) != std::string(actual)) throw std::runtime_error(std::string("Assertion failed: expected \"") + std::string(expected) + std::string("\" but got \"") + std::string(actual) + std::string("\""));
+// Typed assertion helpers (constexpr/template where applicable)
+namespace Test {
+    inline void AssertTrue(bool condition, const char* expr, const char* file, int line) {
+        if (!condition) {
+            throw std::runtime_error(std::string("Assertion failed: ") + expr + " at " + file + ":" + std::to_string(line));
+        }
+    }
+
+    inline void AssertFalse(bool condition, const char* expr, const char* file, int line) {
+        if (condition) {
+            throw std::runtime_error(std::string("Assertion failed: ") + expr + " should be false at " + file + ":" + std::to_string(line));
+        }
+    }
+
+    template <typename T, typename U>
+    inline void AssertEq(const T& expected, const U& actual, const char* expected_expr, const char* actual_expr, const char* file, int line) {
+        if (!(expected == actual)) {
+            throw std::runtime_error(std::string("Assertion failed: expected ") + TestInternal::ToStringGeneric(expected)
+                + std::string(" but got ") + TestInternal::ToStringGeneric(actual)
+                + std::string(" (") + expected_expr + std::string(" vs ") + actual_expr + std::string(") at ") + file + std::string(":") + std::to_string(line));
+        }
+    }
+
+    template <typename T, typename U>
+    inline void AssertNe(const T& expected, const U& actual, const char* expected_expr, const char* actual_expr, const char* file, int line) {
+        if (expected == actual) {
+            throw std::runtime_error(std::string("Assertion failed: ") + TestInternal::ToStringGeneric(expected)
+                + std::string(" should not equal ") + TestInternal::ToStringGeneric(actual)
+                + std::string(" (") + expected_expr + std::string(" vs ") + actual_expr + std::string(") at ") + file + std::string(":") + std::to_string(line));
+        }
+    }
+
+    inline void AssertStreq(const std::string& expected, const std::string& actual, const char* expected_expr, const char* actual_expr, const char* file, int line) {
+        if (expected != actual) {
+            throw std::runtime_error(std::string("Assertion failed: expected \"") + expected + std::string("\" but got \"") + actual + std::string("\" (") + expected_expr + std::string(" vs ") + actual_expr + std::string(") at ") + file + std::string(":") + std::to_string(line));
+        }
+    }
+}
+
+// Thin macro wrappers that forward to typed helpers (preserve expression stringification)
+#define ASSERT_TRUE(condition) ::Test::AssertTrue((condition), #condition, __FILE__, __LINE__)
+#define ASSERT_FALSE(condition) ::Test::AssertFalse((condition), #condition, __FILE__, __LINE__)
+#define ASSERT_EQ(expected, actual) ::Test::AssertEq((expected), (actual), #expected, #actual, __FILE__, __LINE__)
+#define ASSERT_NE(expected, actual) ::Test::AssertNe((expected), (actual), #expected, #actual, __FILE__, __LINE__)
+#define ASSERT_STREQ(expected, actual) ::Test::AssertStreq(std::string(expected), std::string(actual), #expected, #actual, __FILE__, __LINE__)
 
 // Test registration macro
 #define TEST(test_name) \

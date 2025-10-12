@@ -37,6 +37,8 @@ static constexpr double DEFAULT_AI_THINKING_TIME = 2.0;
 static constexpr double DEFAULT_MCTS_EXPLORATION_CONST = 1.4;
 static constexpr int DEFAULT_MCTS_EXPORT_DEPTH = 2;
 static constexpr int DEFAULT_MCTS_EXPORT_WIDTH = 5;
+static constexpr int MS_PER_SECOND = 1000;
+static constexpr int MOVE_EVAL_SIZE = 5;
 
 // Internal helpers to decompose large parsing logic and reduce function complexity
 namespace {
@@ -143,52 +145,57 @@ std::string MCTSSnapshot::ToString() const {
 std::string MCTSSnapshot::ToJson() const {
     // Produce a compact, safe JSON structure limited to a small depth to avoid
     // emitting malformed nested strings. We include essential stats only.
-    Object j;
-    j["total_iterations"] = Value(total_iterations);
-    j["completed_iterations"] = Value(completed_iterations);
-    j["exploration_constant"] = Value(exploration_constant);
-    j["time_limit"] = Value(time_limit);
-    j["elapsed_time"] = Value(elapsed_time);
-    j["best_evaluation"] = Value(best_evaluation);
-    j["nodes_created"] = Value(nodes_created);
-    j["nodes_expanded"] = Value(nodes_expanded);
-    j["avg_simulation_time"] = Value(avg_simulation_time);
+    Object json_obj;
+    json_obj["total_iterations"] = Value(total_iterations);
+    json_obj["completed_iterations"] = Value(completed_iterations);
+    json_obj["exploration_constant"] = Value(exploration_constant);
+    json_obj["time_limit"] = Value(time_limit);
+    json_obj["elapsed_time"] = Value(elapsed_time);
+    json_obj["best_evaluation"] = Value(best_evaluation);
+    json_obj["nodes_created"] = Value(nodes_created);
+    json_obj["nodes_expanded"] = Value(nodes_expanded);
+    json_obj["avg_simulation_time"] = Value(avg_simulation_time);
 
     Array pv;
-    for (const auto& m : principal_variation) pv.emplace_back(Array{Value(m.first.first), Value(m.first.second), Value(m.second.first), Value(m.second.second)});
-    j["principal_variation"] = Value(pv);
+    for (const auto& pv_move : principal_variation) {
+        Array tmp = {Value(pv_move.first.first), Value(pv_move.first.second), Value(pv_move.second.first), Value(pv_move.second.second)};
+        pv.emplace_back(std::move(tmp));
+    }
+    json_obj["principal_variation"] = Value(pv);
 
     // Depth-limited node serializer: include only numeric/boolean fields and arrays
     const int MAX_DEPTH = 2;
     const size_t MAX_CHILDREN = 5;
     std::function<Value(const MCTSNodeSnapshot&, int)> node_to_json = [&](const MCTSNodeSnapshot& node, int depth) -> Value {
-        Object nj;
+        Object node_json;
         // last_move
-        Array lm;
-        lm.emplace_back(Value(node.last_move.first.first));
-        lm.emplace_back(Value(node.last_move.first.second));
-        lm.emplace_back(Value(node.last_move.second.first));
-        lm.emplace_back(Value(node.last_move.second.second));
-        nj["last_move"] = Value(lm);
+        Array last_move_arr;
+        last_move_arr.emplace_back(Value(node.last_move.first.first));
+        last_move_arr.emplace_back(Value(node.last_move.first.second));
+        last_move_arr.emplace_back(Value(node.last_move.second.first));
+        last_move_arr.emplace_back(Value(node.last_move.second.second));
+        node_json["last_move"] = Value(last_move_arr);
 
-        nj["visits"] = Value(node.visits);
-        nj["ucb"] = Value(node.ucb_value);
-        nj["is_terminal"] = Value(node.is_terminal);
-        // prior/virtual_loss not present in MCTSNodeSnapshot; include zeros for compatibility
-        nj["prior"] = Value(0.0);
-        nj["virtual_loss"] = Value(0);
+    node_json["visits"] = Value(node.visits);
+    node_json["ucb"] = Value(node.ucb_value);
+    node_json["is_terminal"] = Value(node.is_terminal);
+    // prior/virtual_loss not present in MCTSNodeSnapshot; include zeros for compatibility
+    node_json["prior"] = Value(0.0);
+    node_json["virtual_loss"] = Value(0);
 
         Array children;
         if (depth > 0 && !node.children.empty()) {
             size_t count = std::min(node.children.size(), MAX_CHILDREN);
-            for (size_t i = 0; i < count; ++i) children.emplace_back(node_to_json(node.children[i], depth - 1));
+            for (size_t i = 0; i < count; ++i) {
+                children.emplace_back(node_to_json(node.children[i], depth - 1));
+            }
         }
-        nj["children"] = Value(children);
-        return Value(nj);
+        node_json["children"] = Value(children);
+        return Value(node_json);
     };
 
-    j["root_node"] = node_to_json(root_node, MAX_DEPTH);
-    return Value(j).dump(2);
+    json_obj["root_node"] = node_to_json(root_node, MAX_DEPTH);
+    return Value(json_obj).dump(2);
 }
 
 std::vector<Move> MCTSSnapshot::GetBestMoves(int count) const {
@@ -205,7 +212,7 @@ std::vector<Move> MCTSSnapshot::GetBestMoves(int count) const {
 std::string MCTSSnapshot::GetSearchSummary() const {
     std::ostringstream oss;
     oss << "MCTS Search: " << completed_iterations << "/" << total_iterations << " iterations";
-    oss << " (" << (elapsed_time * 1000) << "ms)";
+    oss << " (" << (elapsed_time * MS_PER_SECOND) << "ms)";
     oss << " - " << nodes_created << " nodes created";
     oss << " - Best eval: " << best_evaluation;
     return oss.str();
@@ -259,32 +266,36 @@ std::string AIThinkingSnapshot::ToString() const {
 }
 
 std::string AIThinkingSnapshot::ToJson() const {
-    Object j;
-    j["mcts_iterations"] = Value(mcts_iterations);
-    j["thinking_time"] = Value(thinking_time);
-    j["position_evaluation"] = Value(position_evaluation);
-    j["nodes_explored"] = Value(nodes_explored);
-    j["best_move_reasoning"] = Value(best_move_reasoning);
+    Object json_obj;
+    json_obj["mcts_iterations"] = Value(mcts_iterations);
+    json_obj["thinking_time"] = Value(thinking_time);
+    json_obj["position_evaluation"] = Value(position_evaluation);
+    json_obj["nodes_explored"] = Value(nodes_explored);
+    json_obj["best_move_reasoning"] = Value(best_move_reasoning);
 
-    Array mevals;
-    for (const auto& me : move_evaluations) mevals.emplace_back(Array{Value(me.first.first.first), Value(me.first.first.second), Value(me.first.second.first), Value(me.first.second.second), Value(me.second)});
-    j["move_evaluations"] = Value(mevals);
-    j["debug_info"] = Value(Array());
+    Array move_eval_arr;
+    for (const auto& meval : move_evaluations) {
+        move_eval_arr.emplace_back(Array{Value(meval.first.first.first), Value(meval.first.first.second), Value(meval.first.second.first), Value(meval.first.second.second), Value(meval.second)});
+    }
+    json_obj["move_evaluations"] = Value(move_eval_arr);
+    json_obj["debug_info"] = Value(Array());
     if (!debug_info.empty()) {
-        Array di;
-        for (const auto& s : debug_info) di.emplace_back(Value(s));
-        j["debug_info"] = Value(di);
+        Array debug_arr;
+        for (const auto& dbg_str : debug_info) {
+            debug_arr.emplace_back(Value(dbg_str));
+        }
+        json_obj["debug_info"] = Value(debug_arr);
     }
 
     if (has_mcts_data) {
         try {
-            Value ms = ein_json::parse(mcts_state.ToJson());
-            j["mcts_state"] = ms;
-        } catch (...) {
+            Value mcts_val = ein_json::parse(mcts_state.ToJson());
+            json_obj["mcts_state"] = mcts_val;
+        } catch (const std::exception& /*e*/) {
             // omit on failure
         }
     }
-    return Value(j).dump(2);
+    return Value(json_obj).dump(2);
 }
 
 void AIThinkingSnapshot::FromString(const std::string& data) {
@@ -298,15 +309,16 @@ void AIThinkingSnapshot::FromString(const std::string& data) {
             if (obj.count("nodes_explored") != 0) { nodes_explored = obj.at("nodes_explored").as_int(); }
             if (obj.count("best_move_reasoning") != 0 && obj.at("best_move_reasoning").is_string()) { best_move_reasoning = obj.at("best_move_reasoning").as_string(); }
 
+
             move_evaluations.clear();
             if (obj.count("move_evaluations") != 0 && obj.at("move_evaluations").is_array()) {
-                for (const auto& it : obj.at("move_evaluations").as_array()) {
-                    if (it.is_array()) {
-                        const auto& arr = it.as_array();
-                        if (arr.size() == 5) {
-                            Move m = {{arr[0].as_int(), arr[1].as_int()}, {arr[2].as_int(), arr[3].as_int()}};
+                for (const auto& entry : obj.at("move_evaluations").as_array()) {
+                    if (entry.is_array()) {
+                        const auto& arr = entry.as_array();
+                        if (arr.size() == static_cast<size_t>(MOVE_EVAL_SIZE)) {
+                            Move mv = {{arr[0].as_int(), arr[1].as_int()}, {arr[2].as_int(), arr[3].as_int()}};
                             double ev = arr[4].as_double();
-                            move_evaluations.emplace_back(m, ev);
+                            move_evaluations.emplace_back(mv, ev);
                         }
                     }
                 }
@@ -314,7 +326,9 @@ void AIThinkingSnapshot::FromString(const std::string& data) {
 
             debug_info.clear();
             if (obj.count("debug_info") != 0 && obj.at("debug_info").is_array()) {
-                for (const auto& di : obj.at("debug_info").as_array()) if (di.is_string()) debug_info.emplace_back(di.as_string());
+                for (const auto& entry : obj.at("debug_info").as_array()) {
+                    if (entry.is_string()) debug_info.emplace_back(entry.as_string());
+                }
             }
 
             if (obj.count("mcts_state") != 0) {
@@ -559,9 +573,9 @@ void MCTSSnapshot::FromString(const std::string& data) {
                 if (node.contains("is_terminal")) out.is_terminal = node["is_terminal"].get<bool>();
                 out.children.clear();
                 if (node.contains("children") && node["children"].is_array()) {
-                    for (const auto& c : node["children"]) {
+                    for (const auto& child_json : node["children"]) {
                         MCTSNodeSnapshot child;
-                        conv(c, child);
+                        conv(child_json, child);
                         out.children.emplace_back(std::move(child));
                     }
                 }
@@ -927,7 +941,9 @@ Move SnapshotGameRunner::GetAIMove(const GameState& game_state, AIThinkingSnapsh
     ai_thinking.best_move_reasoning = "MCTS selection";
 
     // Export trimmed tree (depth 2, top 3 children)
-    auto export_root = mcts.ExportSearchTree(2, 3);
+    const int kExportDepthLocal = 2;
+    const int kExportWidthLocal = 3;
+    auto export_root = mcts.ExportSearchTree(kExportDepthLocal, kExportWidthLocal);
     // Populate MCTSSnapshot root node
     MCTSSnapshot snapshot;
     snapshot.total_iterations = ai_thinking.mcts_iterations;
@@ -1006,43 +1022,43 @@ std::string SnapshotGameRunner::GetCurrentStatus() const {
     return oss.str();
 }
 
-std::vector<std::string> SnapshotGameRunner::GetDebugInfo() const {
+auto SnapshotGameRunner::GetDebugInfo() const -> std::vector<std::string> {
     return debug_log_;
 }
 
 void SnapshotGameRunner::DumpAnalysis(const std::string& filename) const {
-    std::string actual_filename = filename.empty() ? "game_analysis.txt" : filename;
-    
-    std::ofstream file(actual_filename);
+    const std::string actualFilename = filename.empty() ? "game_analysis.txt" : filename;
+
+    std::ofstream file(actualFilename);
     if (!file.is_open()) {
-        std::cout << "[DEBUG] Failed to open analysis file: " + actual_filename << '\n';
+        std::cout << "[DEBUG] Failed to open analysis file: " + actualFilename << '\n';
         return;
     }
-    
+
     file << "=== Einstein Game Analysis ===\n";
     file << GetCurrentStatus() << "\n";
-    
+
     file << "\n=== Debug Log ===\n";
     for (size_t i = 0; i < debug_log_.size(); ++i) {
         file << "[" << i << "] " << debug_log_[i] << "\n";
     }
-    
+
     file << "\n=== Available Snapshots ===\n";
     auto snapshots = snapshot_manager_.ListSnapshots();
-    for (const auto& snapshot_id : snapshots) {
-        GameSnapshot snapshot = snapshot_manager_.GetSnapshot(snapshot_id);
+    for (const auto& snapshotId : snapshots) {
+        const GameSnapshot snapshot = snapshot_manager_.GetSnapshot(snapshotId);
         file << snapshot.GetSnapshotSummary() << "\n";
     }
-    
-    std::cout << "[DEBUG] Analysis saved to: " + actual_filename << '\n';
+
+    std::cout << "[DEBUG] Analysis saved to: " + actualFilename << '\n';
 }
 
 // MCTS Snapshot helper methods - simplified version
-MCTSSnapshot SnapshotGameRunner::CaptureMCTSStateForDebug() const {
+auto SnapshotGameRunner::CaptureMCTSStateForDebug() const -> MCTSSnapshot {
     MCTSSnapshot snapshot;
     
     // Fill with default/demo values for now
-    snapshot.exploration_constant = 1.4;
+    snapshot.exploration_constant = DEFAULT_MCTS_EXPLORATION_CONST;
     snapshot.total_iterations = mcts_iterations_;
     snapshot.completed_iterations = 0;
     snapshot.time_limit = ai_thinking_time_;
@@ -1060,14 +1076,14 @@ MCTSSnapshot SnapshotGameRunner::CaptureMCTSStateForDebug() const {
 }
 
 // Export live MCTS state into MCTSSnapshot if an MCTS instance is attached
-bool SnapshotGameRunner::CaptureMCTSState(MCTSSnapshot& mcts_snapshot) const {
+auto SnapshotGameRunner::CaptureMCTSState(MCTSSnapshot& mcts_snapshot) const -> bool {
     if (mcts_instance_ == nullptr) {
         return false;
     }
     // Export a moderately deep tree for debugging
-    const int kExportDepth = 2; // levels deep
-    const int kExportWidth = 5; // top children per node
-    auto export_node = mcts_instance_->ExportSearchTree(kExportDepth, kExportWidth);
+    const int kExportDepth = DEFAULT_MCTS_EXPORT_DEPTH; // levels deep
+    const int kExportWidth = DEFAULT_MCTS_EXPORT_WIDTH; // top children per node
+    auto exportNode = mcts_instance_->ExportSearchTree(kExportDepth, kExportWidth);
     // Fill snapshot minimally
     mcts_snapshot.total_iterations = mcts_instance_->GetIterationsPerformed();
     mcts_snapshot.completed_iterations = mcts_instance_->GetIterationsPerformed();
@@ -1076,58 +1092,58 @@ bool SnapshotGameRunner::CaptureMCTSState(MCTSSnapshot& mcts_snapshot) const {
     mcts_snapshot.best_evaluation = 0.0;
     // Convert export_node recursively into MCTSNodeSnapshot structure
     std::function<void(const MCTS::ExportNode&, MCTSNodeSnapshot&)> conv;
-    conv = [&](const MCTS::ExportNode& in, MCTSNodeSnapshot& out) {
-        out.last_move = in.move;
-        out.visits = in.visits;
-        out.wins = in.win_rate;
-        out.ucb_value = in.ucb;
-        out.is_terminal = in.terminal;
+    conv = [&](const MCTS::ExportNode& exportNodeIn, MCTSNodeSnapshot& out) -> void {
+        out.last_move = exportNodeIn.move;
+        out.visits = exportNodeIn.visits;
+        out.wins = exportNodeIn.win_rate;
+        out.ucb_value = exportNodeIn.ucb;
+        out.is_terminal = exportNodeIn.terminal;
         out.children.clear();
-        out.children.reserve(in.children.size());
-        for (const auto& c : in.children) {
+        out.children.reserve(exportNodeIn.children.size());
+        for (const auto& childExport : exportNodeIn.children) {
             MCTSNodeSnapshot child;
-            conv(c, child);
+            conv(childExport, child);
             out.children.emplace_back(std::move(child));
         }
     };
-    conv(export_node, mcts_snapshot.root_node);
+    conv(exportNode, mcts_snapshot.root_node);
     return true;
 }
 
 // Restore an MCTS snapshot into the attached MCTS instance (best-effort)
-bool SnapshotGameRunner::RestoreMCTSState(const MCTSSnapshot& mcts_snapshot) {
+auto SnapshotGameRunner::RestoreMCTSState(const MCTSSnapshot& mcts_snapshot) -> bool {
     if (mcts_instance_ == nullptr) {
         return false;
     }
     // Convert MCTSSnapshot.root_node into ExportNode for import
     std::function<MCTS::ExportNode(const MCTSNodeSnapshot&)> conv;
-    conv = [&](const MCTSNodeSnapshot& in) -> MCTS::ExportNode {
+    conv = [&](const MCTSNodeSnapshot& nodeIn) -> MCTS::ExportNode {
         MCTS::ExportNode out;
-        out.move = in.last_move;
-        out.visits = in.visits;
-        out.win_rate = in.wins;
-        out.ucb = in.ucb_value;
-        out.terminal = in.is_terminal;
-        out.children.reserve(in.children.size());
-        for (const auto& c : in.children) {
-            out.children.emplace_back(conv(c));
+        out.move = nodeIn.last_move;
+        out.visits = nodeIn.visits;
+        out.win_rate = nodeIn.wins;
+        out.ucb = nodeIn.ucb_value;
+        out.terminal = nodeIn.is_terminal;
+        out.children.reserve(nodeIn.children.size());
+        for (const auto& childSnapshot : nodeIn.children) {
+            out.children.emplace_back(conv(childSnapshot));
         }
         return out;
     };
 
-    MCTS::ExportNode root_export = conv(mcts_snapshot.root_node);
+    MCTS::ExportNode rootExport = conv(mcts_snapshot.root_node);
     mcts_instance_->EnableTreePersistence(true);
-    mcts_instance_->ImportSearchTree(root_export);
+    mcts_instance_->ImportSearchTree(rootExport);
     return true;
 }
 
-bool SnapshotGameRunner::RunWithMCTSSnapshots(int max_moves) {
+auto SnapshotGameRunner::RunWithMCTSSnapshots(int max_moves) -> bool {
     std::cout << "Starting game with MCTS snapshots enabled...\n";
     std::cout << "Max moves: " << max_moves << "\n";
     
     // Simple demonstration of MCTS snapshot functionality
-    MCTSSnapshot demo_snapshot = CaptureMCTSStateForDebug();
-    std::cout << "MCTS Snapshot created:\n" << demo_snapshot.GetSearchSummary() << "\n";
+    MCTSSnapshot demoSnapshot = CaptureMCTSStateForDebug();
+    std::cout << "MCTS Snapshot created:\n" << demoSnapshot.GetSearchSummary() << "\n";
     
     std::cout << "MCTS snapshot integration successful!\n";
     std::cout << "This feature allows capturing complete MCTS tree state for debugging.\n";
@@ -1135,7 +1151,7 @@ bool SnapshotGameRunner::RunWithMCTSSnapshots(int max_moves) {
     return true;
 }
 
-GameSnapshot SnapshotGameRunner::CaptureState() const {
+auto SnapshotGameRunner::CaptureState() const -> GameSnapshot {
     GameSnapshot snapshot;
     // Create a minimal valid snapshot for demonstration
     snapshot.snapshot_id = "demo_" + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(
@@ -1152,12 +1168,12 @@ GameSnapshot SnapshotGameRunner::CaptureState() const {
     return snapshot;
 }
 
-bool SnapshotGameRunner::SaveSnapshot(const GameSnapshot& snapshot, const std::string& name) {
-    std::string snapshot_id = name.empty() ? snapshot.snapshot_id : name;
-    return snapshot_manager_.SaveSnapshot(snapshot_id, snapshot);
+auto SnapshotGameRunner::SaveSnapshot(const GameSnapshot& snapshot, const std::string& name) -> bool {
+    const std::string snapshotId = name.empty() ? snapshot.snapshot_id : name;
+    return snapshot_manager_.SaveSnapshot(snapshotId, snapshot);
 }
 
-bool SnapshotGameRunner::Initialize() {
+auto SnapshotGameRunner::Initialize() -> bool {
     // Simple initialization for demo
     debug_log_.clear();
     return true;
